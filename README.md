@@ -1,5 +1,3 @@
-# QUICKSTART
-
 # 🧠 Agentic Search O11y Autotune
 
 A Mastra-based demo that showcases agentic search relevance tuning using observability signals. Built with [Mastra](https://github.com/mastra-ai/mastra), Elasticsearch, and OpenAI.
