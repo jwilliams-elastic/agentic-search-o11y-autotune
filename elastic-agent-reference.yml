@@ -31,7 +31,7 @@ inputs:
           dataset: mastra.logs
           type: logs
         paths:
-          - /Users/jwilliams/vscode/my-mastra-app/logs/*.log
+          - YOUR_FULL_PATH_TO_LOGS_DIR/*.log
         parsers:
           - ndjson:
               overwrite_keys: true

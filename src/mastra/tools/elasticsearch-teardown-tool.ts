@@ -10,8 +10,7 @@ const inputSchema = z.object({
   elasticUrl: z.string().url().optional().describe('Base URL of the Elasticsearch instance. Defaults to ELASTIC_URL from .env'),
   elasticApiKey: z.string().optional().describe('Elasticsearch API Key. Defaults to ELASTIC_API_KEY from .env'),
   indexName: z.string().optional().describe('Name of the Elasticsearch index to delete. Defaults to INDEX_NAME from .env'),
-  inferenceId: z.string().optional().describe('ID for the inference endpoint to delete. Defaults to INFERENCE_ID from .env'),
-  templateId: z.string().default('properties-search-template').describe('ID for the search template'),
+  inferenceId: z.string().optional().describe('ID for the inference endpoint to delete. Defaults to INFERENCE_ID from .env')
 });
 
 const outputSchema = z.object({
@@ -38,22 +37,22 @@ const teardownElasticsearch = async ({
   let allSuccessful = true;
 
   // Delete search template if provided
-  if (templateId) {
-    try {
-      await client.deleteScript({ id: templateId });
-      results.template = { success: true, message: `Deleted existing search template: ${templateId}` };
-    } catch (error: any) {
-      if (error?.meta?.body?.error?.type === 'resource_not_found_exception') {
-        results.template = { success: true, message: `Search template '${templateId}' not found, skipping delete.` };
-      } else {
-        results.template = {
-          success: false,
-          message: `Error deleting template '${templateId}': ${error?.meta?.body?.error?.reason || error.message}`
-        };
-        allSuccessful = false;
-      }
+  try {
+    await client.deleteScript({ id: 'properties-search-template-v1' });
+    await client.deleteScript({ id: 'properties-search-template-v2' });
+    results.template = { success: true, message: `Deleted existing search templates: properties-search-template-v1 and properties-search-template-v2` };
+  } catch (error: any) {
+    if (error?.meta?.body?.error?.type === 'resource_not_found_exception') {
+      results.template = { success: true, message: `Search templates 'properties-search-template-v1' and 'properties-search-template-v2' not found, skipping delete.` };
+    } else {
+      results.template = {
+        success: false,
+        message: `Error deleting templates: ${error?.meta?.body?.error?.reason || error.message}`
+      };
+      allSuccessful = false;
     }
   }
+  
 
   // Delete index if it exists
   if (indexName) {

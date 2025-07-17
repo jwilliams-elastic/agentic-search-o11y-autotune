@@ -8,7 +8,7 @@ config();
 const inputSchema = z.object({
 
   userId: z.string().describe('ID of the user performing the search'),
-  searchTemplateId: z.string().default('properties-search-template').describe('ID for the search template to use'),
+  searchTemplateId: z.string().default('properties-search-template-v1').describe('ID for the search template to use'),
   distance: z.string().optional().describe('Distance for geo search (e.g. "10km")'),
   latitude: z.string().refine(val => !isNaN(parseFloat(val)), { message: 'Latitude must be a valid float' }).optional().describe('Latitude for geo search (as string, will be converted to float)'),
   longitude: z.string().refine(val => !isNaN(parseFloat(val)), { message: 'Longitude must be a valid float' }).optional().describe('Longitude for geo search (as string, will be converted to float)'),

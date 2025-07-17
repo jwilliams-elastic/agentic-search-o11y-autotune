@@ -15,7 +15,6 @@ const workflowInputSchema = z.object({
   dataFile: z.string().optional(),
   inferenceId: z.string().optional(),
   modelId: z.string().optional(),
-  templateId: z.string().optional(),
   numAllocations: z.number().optional()
 });
 
@@ -74,15 +73,13 @@ const indexSetupStep = createStep({
 });
 
 const searchTemplateSetupStep = createStep({
-  id: 'search-template-setup',
+  id: 'search-templates-setup',
   inputSchema: workflowInputSchema,
   outputSchema: workflowOutputSchema,
   execute: async ({ inputData, runtimeContext }) => {
-    // Ensure we provide a default templateId if not provided
     const toolInput = {
       elasticUrl: inputData.elasticUrl,
       elasticApiKey: inputData.elasticApiKey,
-      templateId: inputData.templateId || 'properties-search-template', // Use default if not provided
       indexName: inputData.indexName, // Add indexName to make the type compatible
       inferenceId: inputData.inferenceId, // Add inferenceId to make the type compatible
     };
