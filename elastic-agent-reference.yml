@@ -1,0 +1,43 @@
+###################### Agent Configuration Example #########################
+
+# This file is an example configuration file highlighting only the most common
+# options. The elastic-agent.reference.yml file from the same directory contains all the
+# supported options with more comments. You can use it as a reference.
+outputs:
+  default:
+    type: elasticsearch
+    # Update these values with your Elastic Cloud instance details
+    hosts: ["YOUR_ELASTIC_HOST"]
+    api_key: "YOUR_ELASTIC_API_KEY"
+    ssl.enabled: true
+    preset: balanced
+
+# Configure the agent's GRPC server to use a different port
+agent.grpc:
+  # listen address for the GRPC server that spawned processes connect back to
+  address: localhost
+  # port for the GRPC server that spawned processes connect back to
+  port: 6790
+
+inputs:
+  # Collecting log files from the specified directory
+  - type: filestream
+    id: mastra-logs-input
+    data_stream.namespace: default
+    use_output: default
+    streams:
+      - id: mastra-logs-stream
+        data_stream:
+          dataset: mastra.logs
+          type: logs
+        paths:
+          - /Users/jwilliams/vscode/my-mastra-app/logs/*.log
+        parsers:
+          - ndjson:
+              overwrite_keys: true
+              add_error_key: true
+        processors:
+          - add_fields:
+              target: ''
+              fields:
+                source: mastra-app
