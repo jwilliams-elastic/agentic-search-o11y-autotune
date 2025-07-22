@@ -3,6 +3,8 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { config } from 'dotenv';
 import axios from 'axios';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 config();
 
@@ -10,7 +12,8 @@ const inputSchema = z.object({
   elasticUrl: z.string().url().optional().describe('Base URL of the Elasticsearch instance. Defaults to ELASTIC_URL from .env'),
   elasticApiKey: z.string().optional().describe('Elasticsearch API Key. Defaults to ELASTIC_API_KEY from .env'),
   indexName: z.string().optional().describe('Name of the Elasticsearch index to delete. Defaults to INDEX_NAME from .env'),
-  inferenceId: z.string().optional().describe('ID for the inference endpoint to delete. Defaults to INFERENCE_ID from .env')
+  inferenceId: z.string().optional().describe('ID for the inference endpoint to delete. Defaults to INFERENCE_ID from .env'),
+  templatesDir: z.string().optional().describe('Absolute path to the directory containing search template files (.mustache). Defaults to SEARCH_TEMPLATES_DIR from .env')
 });
 
 const outputSchema = z.object({
@@ -24,7 +27,7 @@ const teardownElasticsearch = async ({
   elasticApiKey,
   indexName,
   inferenceId,
-  templateId,
+  templatesDir,
 }: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> => {
 
   // Instantiate Elastic client with API key auth
@@ -36,22 +39,54 @@ const teardownElasticsearch = async ({
   const results: Record<string, any> = {};
   let allSuccessful = true;
 
-  // Delete search template if provided
+  // Delete all search templates from the search_templates directory
   try {
-    await client.deleteScript({ id: 'properties-search-template-v1' });
-    await client.deleteScript({ id: 'properties-search-template-v2' });
-    results.template = { success: true, message: `Deleted existing search templates: properties-search-template-v1 and properties-search-template-v2` };
-  } catch (error: any) {
-    if (error?.meta?.body?.error?.type === 'resource_not_found_exception') {
-      results.template = { success: true, message: `Search templates 'properties-search-template-v1' and 'properties-search-template-v2' not found, skipping delete.` };
+    const dir = templatesDir || process.env.SEARCH_TEMPLATES_DIR || './search_templates';
+    const files = await fs.readdir(dir);
+    const templateFiles = files.filter(file => file.endsWith('.mustache'));
+    
+    if (templateFiles.length === 0) {
+      results.template = { success: true, message: 'No search templates found to delete.' };
     } else {
-      results.template = {
-        success: false,
-        message: `Error deleting templates: ${error?.meta?.body?.error?.reason || error.message}`
+      const deletedTemplates = [];
+      const errors = [];
+      
+      for (const file of templateFiles) {
+        const templateId = file.replace(/\.mustache$/, '');
+        try {
+          await client.deleteScript({ id: templateId });
+          deletedTemplates.push(templateId);
+        } catch (error: any) {
+          if (error?.meta?.body?.error?.type !== 'resource_not_found_exception') {
+            errors.push(`${templateId}: ${error?.meta?.body?.error?.reason || error.message}`);
+          }
+        }
+      }
+      
+      if (errors.length > 0) {
+        results.template = {
+          success: false,
+          message: `Error deleting some templates: ${errors.join('; ')}`,
+          deletedTemplates,
+          errors
+        };
+        allSuccessful = false;
+      } else {
+        results.template = { 
+          success: true, 
+          message: deletedTemplates.length > 0 
+            ? `Successfully deleted search templates: ${deletedTemplates.join(', ')}`
+            : 'No active search templates found to delete.'
+        };
+      }
+    }
+  } catch (error: any) {
+    results.template = {
+      success: false,
+      message: `Error processing templates: ${error.message}`
       };
       allSuccessful = false;
     }
-  }
   
 
   // Delete index if it exists

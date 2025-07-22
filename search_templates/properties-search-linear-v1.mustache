@@ -1,0 +1,65 @@
+{
+      "_source": false,
+      "size": 10,
+      "fields": [
+        "title",
+        "annual-tax",
+        "maintenance-fee",
+        "number-of-bathrooms",
+        "number-of-bedrooms",
+        "square-footage",
+        "home-price",
+        "property-features",
+        "property-description"
+      ],
+      "retriever": {
+        "linear": {
+          "retrievers": [
+            {
+              "retriever": {
+                "standard": {
+                  "query": {
+                    "semantic": {
+                      "field": "property-description_semantic",
+                      "query": "{{query}}"
+                    }
+                  }
+                }
+              },
+              "weight": 0.3,
+              "normalizer": "minmax"
+            },
+            {
+              "retriever": {
+                "standard": {
+                  "query": {
+                    "semantic": {
+                      "field": "property-features_semantic",
+                      "query": "{{query}}"
+                    }
+                  }
+                }
+              },
+              "weight": 0.3,
+              "normalizer": "minmax"
+            }
+            {{#features}},
+            {
+              "retriever": {
+                "standard": {
+                  "query": {
+                    "multi_match": {
+                      "query": "{{features}}",
+                      "fields": ["property-features", "property-features.keyword"]
+                    }
+                  }
+                }
+              },
+              "weight": 0.7,
+              "normalizer": "minmax"
+            }
+            {{/features}}
+          ]
+        }
+      }
+    }

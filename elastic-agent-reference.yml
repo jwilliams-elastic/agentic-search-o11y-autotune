@@ -22,11 +22,11 @@ agent.grpc:
 inputs:
   # Collecting log files from the specified directory
   - type: filestream
-    id: mastra-logs-input
+    id: logs-agentic-search-o11y-autotune.events
     data_stream.namespace: default
     use_output: default
     streams:
-      - id: mastra-logs-stream
+      - id: logs-agentic-search-o11y-autotune.events
         data_stream:
           dataset: mastra.logs
           type: logs
@@ -40,4 +40,4 @@ inputs:
           - add_fields:
               target: ''
               fields:
-                source: mastra-app
+                source: mastra-app-elastic-agent

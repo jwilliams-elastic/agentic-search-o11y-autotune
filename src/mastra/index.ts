@@ -6,11 +6,13 @@ import { weatherWorkflow } from './workflows/weather-workflow';
 import { weatherAgent } from './agents/weather-agent';
 import { elasticsearchSetupWorkflow } from './workflows/elasticsearch-setup-workflow';
 import { homeSearchAgent } from './agents/home-search-agent';
-import { fileLogger } from './logger';
+// import { fileLogger } from './logger';
+import { logger} from './logger-agentless';
 import { propertyClickThroughTool } from './tools/property-click-through-tool';
 import { elasticsearchSearchTool } from './tools/elasticsearch-search-tool';
 
-fileLogger.info("Mastra runtime started");
+//fileLogger.info("Mastra runtime started");
+logger.info("Mastra runtime started");
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow, elasticsearchSetupWorkflow },

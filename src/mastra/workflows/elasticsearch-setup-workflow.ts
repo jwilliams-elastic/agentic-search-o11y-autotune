@@ -15,7 +15,8 @@ const workflowInputSchema = z.object({
   dataFile: z.string().optional(),
   inferenceId: z.string().optional(),
   modelId: z.string().optional(),
-  numAllocations: z.number().optional()
+  numAllocations: z.number().optional(),
+  templatesDir: z.string().optional()
 });
 
 const workflowOutputSchema = z.object({
@@ -35,7 +36,7 @@ const teardownElasticsearch = createStep({
         elasticApiKey: inputData.elasticApiKey,
         indexName: inputData.indexName,
         inferenceId: inputData.inferenceId,
-        templateId: inputData.templateId,
+        templatesDir: inputData.templatesDir,
         numAllocations: inputData.numAllocations
       };
       const toolResult = await elasticsearchTeardownTool.execute({ context: toolInput, runtimeContext });
@@ -82,6 +83,7 @@ const searchTemplateSetupStep = createStep({
       elasticApiKey: inputData.elasticApiKey,
       indexName: inputData.indexName, // Add indexName to make the type compatible
       inferenceId: inputData.inferenceId, // Add inferenceId to make the type compatible
+      templatesDir: inputData.templatesDir
     };
     const toolResult = await elasticsearchSearchTemplateSetupTool.execute({ context: toolInput, runtimeContext });
     return { ...inputData, ...toolResult }; // propagate all inputData fields forward

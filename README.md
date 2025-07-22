@@ -39,38 +39,35 @@ npm install
 
 ### ⚙️ Setup
 
-1. Create 2 serverless projects
+1. Create 1 elasticsearch serverless project
    - Elasticsearch optimized for vectors 
       - you will need to obtain URL for `.env` `ELASTIC_URL` entry
       - you will need to create an API key for `.env` `ELASTIC_API_KEY` entry 
-   - Elastic for Observability
-      - you will need to obtain URL for `elastic-agent-reference.yml` `hosts` config
-      - you will need to create an API key for `elastic-agent-reference.yml` `api_key` config
 
-1. Create a `.env` file:
+2. Create a `.env` file:
 
-```bash
-cp .env.example .env
-```
+   ```bash
+   cp .env.example .env
+   ```
 
-2. Populate `.env` with values for:
+3. Populate `.env` with values for:
    - OpenAI API Key
    - Elasticsearch endpoint/credentials
-   - Absolulte path for data file
+   - Absolulte path for data file (relative path is: `./data/properties.jsonl`)
+   - Absolute path for search templates folder (relative path is: `./search_templates`)
 
-3. Import `sample_kibana_dashboard.ndjson` into your elasticsearch environment
+4. Import `sample_kibana_dashboard.ndjson` into your elasticsearch environment
    - Open Kibana and navigate to Stack Management -> Saved Objects
    - Click "Import" 
    - Select file and click "Import"
 
 ---
 
-### 🛠 Run Mastra and elastic-agent
+### 🛠 Run Mastra
 
 | Command                                    | Description                              |
 |--------------------------------------------|------------------------------------------|
 | `npm run dev`                              | Run Mastra in dev mode (hot reload)      |
-| `cd elastic-agent && ./elastic-agent run`  | Start Elastic Agent                      |
 
 ---
 
@@ -87,7 +84,7 @@ cp .env.example .env
 - Code is written in [TypeScript](https://www.typescriptlang.org/)
 - Mastra workflows and tools live in `/src`
 - Logs use [pino-pretty](https://github.com/pinojs/pino-pretty) during development
-- Logs are shipped to Elasticsearch (can be same or different from search cluster)
+- Logs are streamed directly to an elasticsearch data stream named 'logs-agentic-search-o11y-autotune.events'
 
 ---
 
@@ -99,7 +96,6 @@ agentic-search-o11y-autotune/
 ├── .env.example                       # Template for env vars
 ├── package.json                       # Project metadata and scripts
 ├── tsconfig.json                      # TypeScript config
-├── elastic-agent-reference.yml        # Sample elastic agent config for search analytics
 ├── sample_kibana_dashboard.ndjson     # Sample kibana dashboard for search analytics
 └── README.md            # You're here
 ```
@@ -117,11 +113,13 @@ This demo includes:
 
 ---
 
-## 🧪 Test Data & Monitoring
+## 🧪 Alternative Logging Option
 
 You can ship logs to an Elasticsearch instance using a local elastic-agent. The agent can be downloaded from [here](https://www.elastic.co/downloads/elastic-agent).
 
-You can use [elastic-agent-reference.yml](./elastic-agent-reference.yml) to configure the agent. You will need to specify values for any entries that start with "YOUR" 
+You can use [elastic-agent-reference.yml](./elastic-agent-reference.yml) to configure an external log shipper. You will need to specify values for any entries that start with "YOUR".
+
+You will also need to update [index.ts](./src/mastra/index.ts) to use the external log shipper configured in [logger.ts](./src/mastra/logger.ts).
 
 ```bash
 ./elastic-agent run
