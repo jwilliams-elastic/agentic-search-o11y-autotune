@@ -8,7 +8,7 @@ import { elasticsearchSetupWorkflow } from './workflows/elasticsearch-setup-work
 import { homeSearchAgent } from './agents/home-search-agent';
 // import { fileLogger } from './logger';
 import { logger} from './logger-agentless';
-import { propertyClickThroughTool } from './tools/property-click-through-tool';
+
 import { elasticsearchSearchTool } from './tools/elasticsearch-search-tool';
 
 //fileLogger.info("Mastra runtime started");
