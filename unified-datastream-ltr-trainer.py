@@ -41,6 +41,23 @@ except ImportError as e:
     sys.exit(1)
 
 class UnifiedDataStreamLTRTrainer:
+    def has_enough_interactions(self, min_interactions: int = 100) -> bool:
+        """Check if there are enough agent_user_interactions events in the data stream"""
+        try:
+            query = {
+                "query": {
+                    "term": {
+                        "custom.event.action": "agent_user_interactions"
+                    }
+                }
+            }
+            result = self.es_client.count(index=self.data_stream, body=query)
+            count = result.get('count', 0)
+            print(f"🔎 Found {count} agent_user_interactions events in '{self.data_stream}'")
+            return count >= min_interactions
+        except Exception as e:
+            print(f"❌ Failed to count interaction events: {e}")
+            return False
     """XGBoost LTR trainer using the unified data stream"""
     
     def __init__(self):
@@ -815,37 +832,43 @@ class UnifiedDataStreamLTRTrainer:
         """Execute the complete LTR pipeline"""
         print("🎯 Starting Unified Data Stream LTR Pipeline")
         print("=" * 50)
-        
+
+        # Step 0: Check for enough user interactions
+        if not self.has_enough_interactions(min_interactions=100):
+            print("❌ Not enough user interactions to train LTR model. Need at least 100 agent_user_interactions events.")
+            print("   Run the system to collect more user interaction data before training.")
+            return False
+
         # Step 1: Check connection
         if not self.check_connection():
             return False
-            
+
         # Step 2: Extract events from unified data stream
         search_events = self.extract_search_events()
         interaction_events = self.extract_interaction_events()
-        
+
         if len(search_events) < 10:
             print(f"❌ Insufficient search events: {len(search_events)} (need 10+)")
             print("   Run some searches with the enhanced search tool first")
             return False
-            
+
         # Step 3: Prepare features
         training_examples = self.prepare_training_features(search_events, interaction_events)
         if not training_examples:
             return False
-            
+
         # Step 4: Train model
         if not self.train_xgboost_model(training_examples):
             return False
-            
+
         # Step 5: Deploy to Elasticsearch
         if not self.deploy_model_to_elasticsearch():
             return False
-            
+
         # Step 6: Test native LTR
         if not self.test_native_ltr():
             return False
-            
+
         print("\n🎉 Unified Data Stream LTR Pipeline Completed Successfully!")
         print("=" * 60)
         print("✅ XGBoost model trained from unified data stream")
@@ -856,7 +879,7 @@ class UnifiedDataStreamLTRTrainer:
         print("   1. Test searches: npx tsx test-native-ltr-search.ts")
         print("   2. Monitor LTR performance in Kibana")  
         print("   3. Retrain periodically as more events accumulate")
-        
+
         return True
 
 def main():
