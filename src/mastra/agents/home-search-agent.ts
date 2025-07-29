@@ -3,7 +3,7 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
 import { elasticsearchSearchTool } from '../tools/elasticsearch-search-tool';
-
+//import { propertyClickThroughTool } from '../tools/property-click-through-tool';
 
 export const homeSearchAgent = new Agent({
   name: 'Home Search Agent',
@@ -21,11 +21,11 @@ export const homeSearchAgent = new Agent({
       9. When users reference specific properties conversationally ("tell me about the first property", "show me property 2"), pass the userMessage and lastSearchResults parameters to elasticsearchSearchTool for automatic conversational detection
       10. The search tool will automatically detect and log conversational interactions with the unified logger
   `,
-  model: createOpenAI({
-    baseURL: 'https://litellm-proxy-service-1059491012611.us-central1.run.app/v1',
-    apiKey: 'sk-H4FpuRvfFzvXJcGrrnqILQ'
-  })('gpt-4.1'),
   tools: { elasticsearchSearchTool },
+
+  `,
+  model: openai('gpt-4o'),
+  tools: { elasticsearchSearchTool, propertyClickThroughTool },
   memory: new Memory({
     storage: new LibSQLStore({
       url: 'file:../mastra.db', // path is relative to the .mastra/output directory
