@@ -49,12 +49,6 @@ class UnifiedDataStreamLTRTrainer:
         self.elastic_api_key = os.getenv('ELASTIC_API_KEY')
         self.data_stream = 'logs-agentic-search-o11y-autotune.events'
         self.model_id = "home_search_ltr_model"
-        
-        # Validate environment
-        if not self.elastic_url or not self.elastic_api_key:
-            print("❌ Missing Elasticsearch credentials in .env file:")
-            print("   ELASTIC_URL and ELASTIC_API_KEY are required")
-            sys.exit(1)
             
         # Initialize Elasticsearch client
         self.es_client = Elasticsearch(
@@ -67,13 +61,13 @@ class UnifiedDataStreamLTRTrainer:
         self.model = None
         self.scaler = StandardScaler()
         
-        # LTR Feature schema based on our enhanced search tool logging
+        # Enhanced feature names for XGBoost training (40+ features)
         self.feature_names = [
-            # Position features
+            # Position-aware features
             'position',
-            'position_reciprocal', 
-            'position_bias_factor',
             'position_log',
+            'position_reciprocal',
+            'position_bias_factor',
             
             # Search performance features
             'elasticsearch_score',
@@ -103,7 +97,38 @@ class UnifiedDataStreamLTRTrainer:
             # Text relevance features (derived)
             'title_query_overlap',
             'description_query_overlap',
-            'exact_match_score'
+            'exact_match_score',
+            
+            # NEW: BM25 Relevance Features
+            'bm25_title_score',
+            'bm25_description_score',
+            'bm25_features_score',
+            'bm25_headings_score',
+            'bm25_combined_score',
+            
+            # NEW: Semantic Similarity Features
+            'semantic_description_similarity',
+            'semantic_features_similarity',
+            'semantic_query_embedding_match',
+            
+            # NEW: Property Attribute Features
+            'property_price_normalized',
+            'bedrooms_match_score',
+            'bathrooms_match_score',
+            'square_footage_normalized',
+            'annual_tax_normalized',
+            'maintenance_fee_normalized',
+            
+            # NEW: Geo-Relevance Features
+            'geo_distance_km',
+            'geo_relevance_score',
+            'same_neighborhood',
+            
+            # NEW: Query-Document Matching Features
+            'title_query_exact_match',
+            'description_query_coverage',
+            'features_query_overlap',
+            'property_status_relevance'
         ]
         
         self.training_examples = []
@@ -124,8 +149,305 @@ class UnifiedDataStreamLTRTrainer:
                 
             return True
         except Exception as e:
-            print(f"❌ Failed to connect to Elasticsearch: {e}")
+            print(f"❌ Connection failed: {e}")
             return False
+    
+    def enrich_with_property_data(self, document_id: str, query: str) -> Dict[str, float]:
+        """Fetch property data and calculate enhanced relevance features"""
+        try:
+            # Get property document by ID
+            doc_response = self.es_client.get(
+                index='properties',
+                id=document_id
+            )
+            property_data = doc_response['_source']
+            
+            # Initialize feature dict
+            features = {}
+            
+            # 1. Get BM25 scores using explain API
+            bm25_features = self.get_bm25_scores(document_id, query)
+            features.update(bm25_features)
+            
+            # 2. Calculate semantic similarity
+            semantic_features = self.calculate_semantic_similarity(query, property_data)
+            features.update(semantic_features)
+            
+            # 3. Extract property attributes
+            attribute_features = self.extract_property_attributes(property_data, query)
+            features.update(attribute_features)
+            
+            # 4. Calculate geo-relevance
+            geo_features = self.calculate_geo_relevance(property_data, query)
+            features.update(geo_features)
+            
+            # 5. Advanced query-document matching
+            matching_features = self.calculate_query_document_matching(property_data, query)
+            features.update(matching_features)
+            
+            return features
+            
+        except Exception as e:
+            print(f"⚠️  Failed to enrich document {document_id}: {e}")
+            # Return default values for all new features
+            return self.get_default_property_features()
+    
+    def get_bm25_scores(self, doc_id: str, query: str) -> Dict[str, float]:
+        """Extract BM25 scores for individual fields using explain API"""
+        try:
+            explain_query = {
+                'query': {
+                    'multi_match': {
+                        'query': query,
+                        'fields': [
+                            'title^2',
+                            'property-description^1.5', 
+                            'property-features^1.2',
+                            'headings^1.1'
+                        ]
+                    }
+                }
+            }
+            
+            explain_response = self.es_client.explain(
+                index='properties',
+                id=doc_id,
+                body=explain_query
+            )
+            
+            return self.parse_explain_scores(explain_response)
+            
+        except Exception as e:
+            print(f"⚠️  BM25 extraction failed for {doc_id}: {e}")
+            return {
+                'bm25_title_score': 0.0,
+                'bm25_description_score': 0.0,
+                'bm25_features_score': 0.0,
+                'bm25_headings_score': 0.0,
+                'bm25_combined_score': 0.0
+            }
+    
+    def parse_explain_scores(self, explain_response: dict) -> Dict[str, float]:
+        """Parse Elasticsearch explain response to extract field-specific BM25 scores"""
+        scores = {
+            'bm25_title_score': 0.0,
+            'bm25_description_score': 0.0,
+            'bm25_features_score': 0.0,
+            'bm25_headings_score': 0.0,
+            'bm25_combined_score': 0.0
+        }
+        
+        try:
+            if 'explanation' in explain_response and explain_response['matched']:
+                total_score = explain_response['explanation']['value']
+                scores['bm25_combined_score'] = total_score
+                
+                # Parse field-specific scores from explanation details
+                explanation = explain_response['explanation']
+                if 'details' in explanation:
+                    for detail in explanation['details']:
+                        description = detail.get('description', '').lower()
+                        value = detail.get('value', 0.0)
+                        
+                        if 'title' in description:
+                            scores['bm25_title_score'] = max(scores['bm25_title_score'], value)
+                        elif 'description' in description:
+                            scores['bm25_description_score'] = max(scores['bm25_description_score'], value)
+                        elif 'features' in description:
+                            scores['bm25_features_score'] = max(scores['bm25_features_score'], value)
+                        elif 'headings' in description:
+                            scores['bm25_headings_score'] = max(scores['bm25_headings_score'], value)
+                            
+        except Exception as e:
+            print(f"⚠️  BM25 score parsing failed: {e}")
+            
+        return scores
+    
+    def calculate_semantic_similarity(self, query: str, property_data: dict) -> Dict[str, float]:
+        """Calculate semantic similarity using Elasticsearch vector search"""
+        try:
+            # Run a knn search against the property-description_semantic or property-features_semantic field
+            knn_query = {
+                "field": "property-description_semantic",
+                "query": query,
+                "k": 1,
+                "num_candidates": 10
+            }
+            response = self.es_client.search(
+                index="properties",
+                knn=knn_query,
+                size=1,
+                query={"term": {"_id": property_data.get("id", property_data.get("_id", ""))}}
+            )
+            score = response["hits"]["hits"][0]["_score"] if response["hits"]["hits"] else 0.0
+            return {
+                "semantic_description_similarity": score,
+                "semantic_features_similarity": score,  # Repeat for features if needed
+                "semantic_query_embedding_match": score
+            }
+        except Exception as e:
+            print(f"⚠️  Semantic similarity failed: {e}")
+            return {
+                "semantic_description_similarity": 0.0,
+                "semantic_features_similarity": 0.0,
+                "semantic_query_embedding_match": 0.0
+            }
+
+    def extract_property_attributes(self, property_data: dict, query: str) -> Dict[str, float]:
+        """Extract and normalize property attribute features"""
+        try:
+            features = {}
+            
+            # Price normalization (using median price as reference)
+            home_price = property_data.get('home-price', 0)
+            median_price = 500000  # Rough median - could be calculated from data
+            features['property_price_normalized'] = min(home_price / median_price, 2.0)
+            
+            # Bedroom/bathroom matching
+            prop_bedrooms = property_data.get('number-of-bedrooms', 0)
+            prop_bathrooms = property_data.get('number-of-bathrooms', 0)
+            
+            # Extract bedroom/bathroom from query
+            query_bedrooms = self.extract_bedrooms_from_query(query)
+            query_bathrooms = self.extract_bathrooms_from_query(query)
+            
+            # Calculate match scores
+            if query_bedrooms > 0:
+                features['bedrooms_match_score'] = 1.0 if prop_bedrooms == query_bedrooms else max(0, 1 - abs(prop_bedrooms - query_bedrooms) * 0.2)
+            else:
+                features['bedrooms_match_score'] = 0.5  # Neutral if no preference
+                
+            if query_bathrooms > 0:
+                features['bathrooms_match_score'] = 1.0 if prop_bathrooms == query_bathrooms else max(0, 1 - abs(prop_bathrooms - query_bathrooms) * 0.2)
+            else:
+                features['bathrooms_match_score'] = 0.5  # Neutral if no preference
+            
+            # Square footage normalization
+            sq_ft = property_data.get('square-footage', 0)
+            avg_sq_ft = 1500  # Rough average
+            features['square_footage_normalized'] = min(sq_ft / avg_sq_ft, 3.0)
+            
+            # Tax and maintenance normalization
+            annual_tax = property_data.get('annual-tax', 0)
+            features['annual_tax_normalized'] = min(annual_tax / 10000, 2.0)  # Scale to reasonable range
+            
+            maintenance_fee = property_data.get('maintenance-fee', 0)
+            features['maintenance_fee_normalized'] = min(maintenance_fee / 500, 2.0)  # Monthly fee scale
+            
+            return features
+            
+        except Exception as e:
+            print(f"⚠️  Property attribute extraction failed: {e}")
+            return {
+                'property_price_normalized': 0.5,
+                'bedrooms_match_score': 0.5,
+                'bathrooms_match_score': 0.5,
+                'square_footage_normalized': 0.5,
+                'annual_tax_normalized': 0.5,
+                'maintenance_fee_normalized': 0.5
+            }
+    
+    def calculate_geo_relevance(self, property_data: dict, query: str) -> Dict[str, float]:
+        """Calculate geo-relevance features"""
+        try:
+            # For now, simple geo features
+            # In production, you'd extract location from query and calculate actual distances
+            
+            has_location = bool(property_data.get('location') or property_data.get('geo_point'))
+            query_has_location = bool(any(word in query.lower() for word in ['near', 'downtown', 'city', 'neighborhood', 'area']))
+            
+            return {
+                'geo_distance_km': 5.0 if has_location else 10.0,  # Default reasonable distance
+                'geo_relevance_score': 1.0 if (has_location and query_has_location) else 0.5,
+                'same_neighborhood': 1.0 if (has_location and query_has_location) else 0.0
+            }
+            
+        except Exception as e:
+            print(f"⚠️  Geo relevance calculation failed: {e}")
+            return {
+                'geo_distance_km': 10.0,
+                'geo_relevance_score': 0.5,
+                'same_neighborhood': 0.0
+            }
+    
+    def calculate_query_document_matching(self, property_data: dict, query: str) -> Dict[str, float]:
+        """Calculate advanced query-document matching features"""
+        try:
+            query_lower = query.lower()
+            query_tokens = set(query_lower.split())
+            
+            title = property_data.get('title', '').lower()
+            description = property_data.get('property-description', '').lower()
+            features = property_data.get('property-features', '').lower()
+            status = property_data.get('property-status', '').lower()
+            
+            # Exact match in title
+            title_exact_match = 1.0 if query_lower in title else 0.0
+            
+            # Query coverage in description
+            desc_tokens = set(description.split())
+            coverage = len(query_tokens & desc_tokens) / max(len(query_tokens), 1)
+            
+            # Features overlap
+            features_tokens = set(features.split())
+            features_overlap = len(query_tokens & features_tokens) / max(len(query_tokens), 1)
+            
+            # Status relevance (active listings preferred)
+            status_relevance = 1.0 if 'active' in status or 'available' in status else 0.7
+            
+            return {
+                'title_query_exact_match': title_exact_match,
+                'description_query_coverage': coverage,
+                'features_query_overlap': features_overlap,
+                'property_status_relevance': status_relevance
+            }
+            
+        except Exception as e:
+            print(f"⚠️  Query-document matching failed: {e}")
+            return {
+                'title_query_exact_match': 0.0,
+                'description_query_coverage': 0.0,
+                'features_query_overlap': 0.0,
+                'property_status_relevance': 0.7
+            }
+    
+    def extract_bedrooms_from_query(self, query: str) -> int:
+        """Extract bedroom count from query"""
+        import re
+        match = re.search(r'(\d+)[\s-]*(?:bed|bedroom)', query.lower())
+        return int(match.group(1)) if match else 0
+    
+    def extract_bathrooms_from_query(self, query: str) -> int:
+        """Extract bathroom count from query"""
+        import re
+        match = re.search(r'(\d+)[\s-]*(?:bath|bathroom)', query.lower())
+        return int(match.group(1)) if match else 0
+    
+    def get_default_property_features(self) -> Dict[str, float]:
+        """Return default values for all property-based features"""
+        return {
+            'bm25_title_score': 0.0,
+            'bm25_description_score': 0.0,
+            'bm25_features_score': 0.0,
+            'bm25_headings_score': 0.0,
+            'bm25_combined_score': 0.0,
+            'semantic_description_similarity': 0.0,
+            'semantic_features_similarity': 0.0,
+            'semantic_query_embedding_match': 0.0,
+            'property_price_normalized': 0.5,
+            'bedrooms_match_score': 0.5,
+            'bathrooms_match_score': 0.5,
+            'square_footage_normalized': 0.5,
+            'annual_tax_normalized': 0.5,
+            'maintenance_fee_normalized': 0.5,
+            'geo_distance_km': 10.0,
+            'geo_relevance_score': 0.5,
+            'same_neighborhood': 0.0,
+            'title_query_exact_match': 0.0,
+            'description_query_coverage': 0.0,
+            'features_query_overlap': 0.0,
+            'property_status_relevance': 0.7
+        }
             
     def extract_search_events(self):
         """Extract agent_search events from unified data stream"""
@@ -200,8 +522,9 @@ class UnifiedDataStreamLTRTrainer:
             return []
             
     def prepare_training_features(self, search_events, interaction_events):
-        """Convert raw ECS events to LTR training features"""
-        print("🔧 Preparing training features from ECS events...")
+        """Convert raw ECS events to LTR training features with property enrichment"""
+        print("🔧 Preparing ENHANCED training features from ECS events...")
+        print(f"🎨 Feature count: {len(self.feature_names)} enhanced features (was 25, now 40+)")
         
         # Create interaction lookup by session_id and document_id
         interaction_lookup = {}
@@ -266,6 +589,17 @@ class UnifiedDataStreamLTRTrainer:
                     'description_query_overlap': max(0, 1 - (position - 1) * 0.08 + np.random.normal(0, 0.1)),
                     'exact_match_score': max(0, 1 - (position - 1) * 0.15 + np.random.normal(0, 0.1))
                 }
+                
+                # 🚀 NEW: Enrich with property-specific features
+                try:
+                    property_features = self.enrich_with_property_data(doc_id, query)
+                    features.update(property_features)
+                    print(f"✅ Enriched document {doc_id} with {len(property_features)} property features")
+                except Exception as e:
+                    print(f"⚠️  Property enrichment failed for {doc_id}: {e}")
+                    # Add default values for property features
+                    default_features = self.get_default_property_features()
+                    features.update(default_features)
                 
                 # Calculate relevance based on interactions
                 key = f"{session_id}_{doc_id}"
