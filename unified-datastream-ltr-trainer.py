@@ -172,9 +172,9 @@ class UnifiedDataStreamLTRTrainer:
     def enrich_with_property_data(self, document_id: str, query: str) -> Dict[str, float]:
         """Fetch property data and calculate enhanced relevance features"""
         try:
-            # Get property document by ID
+            # Get property document by ID from the embeddings index
             doc_response = self.es_client.get(
-                index='properties',
+                index='properties_with_embeddings',
                 id=document_id
             )
             property_data = doc_response['_source']
@@ -227,7 +227,7 @@ class UnifiedDataStreamLTRTrainer:
             }
             
             explain_response = self.es_client.explain(
-                index='properties',
+                index='properties_with_embeddings',
                 id=doc_id,
                 body=explain_query
             )
@@ -283,24 +283,76 @@ class UnifiedDataStreamLTRTrainer:
     def calculate_semantic_similarity(self, query: str, property_data: dict) -> Dict[str, float]:
         """Calculate semantic similarity using Elasticsearch vector search"""
         try:
-            # Run a knn search against the property-description_semantic or property-features_semantic field
-            knn_query = {
-                "field": "property-description_semantic",
-                "query": query,
-                "k": 1,
-                "num_candidates": 10
+            # Get the document ID
+            doc_id = property_data.get("id", property_data.get("_id", ""))
+            
+            # Run a semantic search query for this specific document
+            semantic_query = {
+                "query": {
+                    "bool": {
+                        "must": [
+                            {
+                                "semantic": {
+                                    "property-description_semantic": {
+                                        "query": query
+                                    }
+                                }
+                            },
+                            {
+                                "term": {
+                                    "_id": doc_id
+                                }
+                            }
+                        ]
+                    }
+                }
             }
-            response = self.es_client.search(
-                index="properties",
-                knn=knn_query,
-                size=1,
-                query={"term": {"_id": property_data.get("id", property_data.get("_id", ""))}}
+            
+            desc_response = self.es_client.search(
+                index="properties_with_embeddings",
+                body=semantic_query,
+                size=1
             )
-            score = response["hits"]["hits"][0]["_score"] if response["hits"]["hits"] else 0.0
+            
+            desc_score = desc_response["hits"]["hits"][0]["_score"] if desc_response["hits"]["hits"] else 0.0
+            
+            # Similar query for features field
+            features_query = {
+                "query": {
+                    "bool": {
+                        "must": [
+                            {
+                                "semantic": {
+                                    "property-features_semantic": {
+                                        "query": query
+                                    }
+                                }
+                            },
+                            {
+                                "term": {
+                                    "_id": doc_id
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+            
+            features_response = self.es_client.search(
+                index="properties_with_embeddings",
+                body=features_query,
+                size=1
+            )
+            
+            features_score = features_response["hits"]["hits"][0]["_score"] if features_response["hits"]["hits"] else 0.0
+            
+            # Average the scores for overall semantic match
+            avg_score = (desc_score + features_score) / 2.0
+            
             return {
-                "semantic_description_similarity": score,
-                "semantic_features_similarity": score,  # Repeat for features if needed
-                "semantic_query_embedding_match": score
+                "semantic_description_similarity": desc_score,
+                "semantic_features_similarity": features_score,
+                "semantic_query_embedding_match": avg_score
             }
         except Exception as e:
             print(f"⚠️  Semantic similarity failed: {e}")
@@ -502,6 +554,51 @@ class UnifiedDataStreamLTRTrainer:
             print(f"❌ Failed to extract search events: {e}")
             return []
             
+    def extract_search_results(self):
+        """Extract search_result_logged events to get actual document IDs"""
+        print("📊 Extracting search result events from unified data stream...")
+        
+        results_query = {
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"term": {"custom.event.action": "search_result_logged"}},
+                        {"range": {"@timestamp": {"gte": "now-7d"}}}
+                    ]
+                }
+            },
+            "size": 10000,
+            "sort": [{"@timestamp": {"order": "desc"}}]
+        }
+        
+        try:
+            response = self.es_client.search(
+                index=self.data_stream,
+                body=results_query
+            )
+            
+            # Create lookup: session_id -> position -> document_id
+            results_lookup = {}
+            for hit in response['hits']['hits']:
+                source = hit['_source']
+                if 'custom' in source:
+                    custom = source['custom']
+                    session_id = custom.get('search', {}).get('session_id')
+                    position = custom.get('search', {}).get('result', {}).get('position')
+                    doc_id = custom.get('search', {}).get('result', {}).get('document_id')
+                    
+                    if session_id and position and doc_id:
+                        if session_id not in results_lookup:
+                            results_lookup[session_id] = {}
+                        results_lookup[session_id][position] = doc_id
+                        
+            print(f"✅ Found {len(results_lookup)} sessions with search results")
+            return results_lookup
+            
+        except Exception as e:
+            print(f"❌ Failed to extract search results: {e}")
+            return {}
+            
     def extract_interaction_events(self):
         """Extract agent_user_interactions events from unified data stream"""
         print("📊 Extracting interaction events from unified data stream...")
@@ -538,7 +635,7 @@ class UnifiedDataStreamLTRTrainer:
             print(f"❌ Failed to extract interaction events: {e}")
             return []
             
-    def prepare_training_features(self, search_events, interaction_events):
+    def prepare_training_features(self, search_events, interaction_events, results_lookup):
         """Convert raw ECS events to LTR training features with property enrichment"""
         print("🔧 Preparing ENHANCED training features from ECS events...")
         print(f"🎨 Feature count: {len(self.feature_names)} enhanced features (was 25, now 40+)")
@@ -575,9 +672,19 @@ class UnifiedDataStreamLTRTrainer:
             if not session_id or results_count == 0:
                 continue
                 
-            # Generate features for each position (simulate results)
-            for position in range(1, min(11, results_count + 1)):  # Top 10 results
-                doc_id = f"doc_{session_id}_{position}"
+            # Get actual document IDs for this session
+            session_results = results_lookup.get(session_id, {})
+            if not session_results:
+                # Skip if we don't have search results for this session
+                continue
+                
+            # Generate features for each position (up to top 10)
+            for position in range(1, min(11, results_count + 1)):
+                # Use actual document ID from search results
+                doc_id = session_results.get(position)
+                if not doc_id:
+                    # If we don't have the document ID for this position, skip it
+                    continue
                 
                 # Extract features based on search event data
                 features = {
@@ -845,6 +952,7 @@ class UnifiedDataStreamLTRTrainer:
 
         # Step 2: Extract events from unified data stream
         search_events = self.extract_search_events()
+        results_lookup = self.extract_search_results()
         interaction_events = self.extract_interaction_events()
 
         if len(search_events) < 10:
@@ -853,7 +961,7 @@ class UnifiedDataStreamLTRTrainer:
             return False
 
         # Step 3: Prepare features
-        training_examples = self.prepare_training_features(search_events, interaction_events)
+        training_examples = self.prepare_training_features(search_events, interaction_events, results_lookup)
         if not training_examples:
             return False
 
