@@ -174,7 +174,7 @@ class UnifiedDataStreamLTRTrainer:
         try:
             # Get property document by ID from the embeddings index
             doc_response = self.es_client.get(
-                index='properties_with_embeddings',
+                index='properties',
                 id=document_id
             )
             property_data = doc_response['_source']
@@ -227,7 +227,7 @@ class UnifiedDataStreamLTRTrainer:
             }
             
             explain_response = self.es_client.explain(
-                index='properties_with_embeddings',
+                index='properties',
                 id=doc_id,
                 body=explain_query
             )
@@ -309,7 +309,7 @@ class UnifiedDataStreamLTRTrainer:
             }
             
             desc_response = self.es_client.search(
-                index="properties_with_embeddings",
+                index="properties",
                 body=semantic_query,
                 size=1
             )
@@ -339,7 +339,7 @@ class UnifiedDataStreamLTRTrainer:
             }
             
             features_response = self.es_client.search(
-                index="properties_with_embeddings",
+                index="properties",
                 body=features_query,
                 size=1
             )

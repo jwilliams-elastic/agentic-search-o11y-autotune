@@ -8,117 +8,6 @@ import { config } from 'dotenv';
 const MIN_SEARCH_EVENTS = 15;   // Minimum search events before triggering auto-training
 const MIN_INTERACTION_EVENTS = 8; // Minimum interaction events before triggering auto-training
 
-// Conversational pattern detection
-const POSITION_PATTERNS = [
-  { pattern: /\b(?:first|1st)\b/i, position: 1 },
-  { pattern: /\b(?:second|2nd)\b/i, position: 2 },
-  { pattern: /\b(?:third|3rd)\b/i, position: 3 },
-  { pattern: /\b(?:fourth|4th)\b/i, position: 4 },
-  { pattern: /\b(?:fifth|5th)\b/i, position: 5 },
-  { pattern: /\bproperty\s+(\d+)\b/i, position: 'match' },
-  { pattern: /\boption\s+(\d+)\b/i, position: 'match' },
-  { pattern: /\bresult\s+(\d+)\b/i, position: 'match' },
-  { pattern: /\bnumber\s+(\d+)\b/i, position: 'match' }
-];
-
-// Detect conversational references to search results
-/**
- * Calculate confidence score for conversational detection based on pattern matching
- * @param message - The user's message
- * @param position - The detected position (1-based)
- * @returns confidence score between 0.5 and 1.0
- */
-function calculateConfidenceScore(message: string, position: number | null): number {
-  if (!position) return 0.5;
-  
-  let confidence = 0.6; // Base confidence
-  
-  // Boost confidence for explicit position references
-  if (/\b(first|1st)\b/i.test(message)) confidence += 0.25;
-  if (/\b(second|2nd)\b/i.test(message)) confidence += 0.25;
-  if (/\b(third|3rd)\b/i.test(message)) confidence += 0.25;
-  if (/\b(property|listing|home|house)\s*#?\s*\d+/i.test(message)) confidence += 0.3;
-  
-  // Boost confidence for definitive language
-  if (/\b(tell me about|show me|more info|details about)\b/i.test(message)) confidence += 0.15;
-  if (/\b(that one|this one|the one)\b/i.test(message)) confidence += 0.1;
-  
-  // Boost confidence for direct references
-  if (/\btop\s*(result|property|listing)/i.test(message)) confidence += 0.2;
-  if (/\babove\b/i.test(message)) confidence += 0.15;
-  
-  // Reduce confidence for vague language
-  if (/\b(maybe|might|could|perhaps)\b/i.test(message)) confidence -= 0.1;
-  if (/\b(or|either|any)\b/i.test(message)) confidence -= 0.05;
-  
-  // Ensure confidence stays within bounds
-  return Math.max(0.5, Math.min(1.0, confidence));
-}
-
-function detectConversationalInteraction(message: string, userId: string, sessionId: string, lastSearchResults: any[] = []) {
-  let detectedPosition: number | null = null;
-  
-  // Check position patterns
-  for (const pattern of POSITION_PATTERNS) {
-    const match = message.match(pattern.pattern);
-    if (match) {
-      if (pattern.position === 'match' && match[1]) {
-        detectedPosition = parseInt(match[1]);
-      } else if (typeof pattern.position === 'number') {
-        detectedPosition = pattern.position;
-      }
-      break;
-    }
-  }
-  
-  // If no specific position detected, check for general interest indicators
-  if (!detectedPosition && (
-    /\b(?:this|that|it)\b/i.test(message) ||
-    /\b(?:more|details)\b/i.test(message)
-  )) {
-    detectedPosition = 1; // Assume referring to top result
-  }
-  
-  // Log conversational interaction if detected
-  if (detectedPosition && lastSearchResults.length >= detectedPosition) {
-    const targetResult = lastSearchResults.find((r: any) => r.position === detectedPosition);
-    
-    if (targetResult) {
-      logger.info({
-        '@timestamp': new Date().toISOString(),
-        'event.action': 'agent_user_interactions',
-        'event.category': ['user'],
-        'event.outcome': 'success',
-        'user.id': userId,
-        'search.session_id': sessionId,
-        'search.interaction': {
-          document_id: targetResult.id,
-          position: detectedPosition,
-          type: 'conversational_click',
-          trigger: 'natural_language_detection',
-          original_message: message,
-          detected_pattern: 'conversational_reference'
-        },
-        'agent': {
-          conversational_detection: true,
-          confidence_score: calculateConfidenceScore(message, detectedPosition)
-        },
-        'service': {
-          name: 'elasticsearch-search-tool'
-        }
-      });
-      
-      return {
-        detected: true,
-        position: detectedPosition,
-        document_id: targetResult.id,
-        type: 'conversational_click'
-      };
-    }
-  }
-  
-  return { detected: false };
-}
 
 config();
 
@@ -139,12 +28,7 @@ const inputSchema = z.object({
   enableLTR: z.boolean().default(true).describe('Enable LTR reranking'),
   ltrModelName: z.string().optional().default('home_search_ltr_model').describe('Name of the LTR model to use for rescoring'),
   logInteractions: z.boolean().default(true).describe('Log search interactions for LTR training'),
-  userMessage: z.string().optional().describe('User message to analyze for conversational references'),
-  lastSearchResults: z.array(z.object({
-    id: z.string(),
-    title: z.string(),
-    position: z.number()
-  })).optional().describe('Previous search results for conversational detection'),
+  // ...existing code...
 });
 
 const outputSchema = z.object({
@@ -162,19 +46,7 @@ const searchProperties = async (params: z.infer<typeof inputSchema>): Promise<z.
   const startTime = Date.now();
   const sessionId = `search_session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
   
-  // Check for conversational interactions first
-  if (params.userMessage && params.lastSearchResults) {
-    const conversationalResult = detectConversationalInteraction(
-      params.userMessage,
-      params.userId,
-      sessionId,
-      params.lastSearchResults
-    );
-    
-    if (conversationalResult.detected) {
-      console.log(`🎧 Detected conversational interaction: position ${conversationalResult.position}`);
-    }
-  }
+  // ...existing code...
   
   // Get values from params or environment variables
   const elasticUrl = process.env.ELASTIC_URL;
