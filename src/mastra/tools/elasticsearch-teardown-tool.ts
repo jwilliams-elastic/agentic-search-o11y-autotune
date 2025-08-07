@@ -12,6 +12,7 @@ const inputSchema = z.object({
   elasticUrl: z.string().url().optional().describe('Base URL of the Elasticsearch instance. Defaults to ELASTIC_URL from .env'),
   elasticApiKey: z.string().optional().describe('Elasticsearch API Key. Defaults to ELASTIC_API_KEY from .env'),
   indexName: z.string().optional().describe('Name of the Elasticsearch index to delete. Defaults to INDEX_NAME from .env'),
+  dataStreamName: z.string().optional().describe('Name of the Elasticsearch datastream to delete. Defaults to ELASTIC_LOGS_DATA_STREAM from .env'),
   inferenceId: z.string().optional().describe('ID for the inference endpoint to delete. Defaults to INFERENCE_ID from .env'),
   templatesDir: z.string().optional().describe('Absolute path to the directory containing search template files (.mustache). Defaults to SEARCH_TEMPLATES_DIR from .env')
 });
@@ -26,6 +27,7 @@ const teardownElasticsearch = async ({
   elasticUrl,
   elasticApiKey,
   indexName,
+  dataStreamName,
   inferenceId,
   templatesDir,
 }: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> => {
@@ -107,6 +109,41 @@ const teardownElasticsearch = async ({
       };
       allSuccessful = false;
     }
+  }
+
+  // Delete data stream if it exists
+  dataStreamName = dataStreamName || process.env.ELASTIC_LOGS_DATA_STREAM;
+  if (dataStreamName) {
+    let dsSuccess = true;
+    let dsMessage = '';
+    try {
+      try {
+        // Attempt to retrieve the data stream
+        await client.indices.getDataStream({ name: dataStreamName });
+
+        // If no error was thrown, the data stream exists
+        await client.indices.deleteDataStream({ name: dataStreamName });
+        dsMessage = `Deleted data stream: ${dataStreamName}`;
+        console.log(dsMessage);
+      } catch (err: any) {
+        // If the error is a 404, the data stream does not exist
+        if (err.meta?.statusCode === 404) {
+          dsMessage = `Data stream not found: ${dataStreamName} (skipping delete)`;
+          console.log(dsMessage);
+        } else {
+          // Unexpected error — rethrow it
+          throw err;
+        }
+      }
+    } catch (error: any) {
+      dsSuccess = false;
+      dsMessage = `Error deleting data stream '${dataStreamName}': ${error?.meta?.body?.error?.reason || error.message}`;
+      allSuccessful = false;
+    }
+    results.dataStream = {
+      success: dsSuccess,
+      message: dsMessage
+    };
   }
 
   // Delete inference endpoint

@@ -10,11 +10,12 @@
         "square-footage",
         "home-price",
         "property-features",
-        "property-description"
+        "property-description",
+        "geo_point"
       ],
       "retriever": {
         "rrf": {
-          "rank_window_size": 50,
+          "rank_window_size": 100,
           "rank_constant": 60,
           "filter": {
             "bool": {

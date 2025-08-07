@@ -8,13 +8,12 @@ import { config } from 'dotenv';
 const MIN_SEARCH_EVENTS = 15;   // Minimum search events before triggering auto-training
 const MIN_INTERACTION_EVENTS = 8; // Minimum interaction events before triggering auto-training
 
-
 config();
 
 const inputSchema = z.object({
-
   userId: z.string().describe('ID of the user performing the search'),
-  searchTemplateId: z.string().default('properties-search-adaptive-ltr').describe('ID for the search template to use. Options: properties-search-adaptive-ltr (RECOMMENDED), properties-search-rrf-v1, properties-search-linear-v1'),
+  sessionId: z.string().optional().describe('Search session ID for tracking interactions across tools'),
+  searchTemplateId: z.string().default('properties-search-v3').describe('ID for the search template to use. Options: properties-search-v1, properties-search-v2, properties-search-v3 (RECOMMENDED), properties-search-v4'),
   distance: z.string().optional().describe('Distance for geo search (e.g. "10km")'),
   latitude: z.string().refine(val => !isNaN(parseFloat(val)), { message: 'Latitude must be a valid float' }).optional().describe('Latitude for geo search (as string, will be converted to float)'),
   longitude: z.string().refine(val => !isNaN(parseFloat(val)), { message: 'Longitude must be a valid float' }).optional().describe('Longitude for geo search (as string, will be converted to float)'),
@@ -25,10 +24,7 @@ const inputSchema = z.object({
   home_price: z.number().optional().describe('Maximum home price'),
   query: z.string().optional().describe('Semantic search query for property description and features'),
   features: z.string().optional().describe('Specific property features to search for'),
-  enableLTR: z.boolean().default(true).describe('Enable LTR reranking'),
-  ltrModelName: z.string().optional().default('home_search_ltr_model').describe('Name of the LTR model to use for rescoring'),
-  logInteractions: z.boolean().default(true).describe('Log search interactions for LTR training'),
-  // ...existing code...
+  logInteractions: z.boolean().default(true).describe('Log search interactions for LTR training')
 });
 
 const outputSchema = z.object({
@@ -37,14 +33,14 @@ const outputSchema = z.object({
   results: z.array(z.record(z.string(), z.any())).optional(),
   total: z.number().optional(),
   sessionId: z.string().optional(),
-  ltrEnabled: z.boolean().optional(),
   searchTimeMs: z.number().optional(),
   details: z.record(z.string(), z.any()).optional(),
 });
 
 const searchProperties = async (params: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> => {
   const startTime = Date.now();
-  const sessionId = `search_session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  // Use provided sessionId or generate one if not provided
+  const sessionId = params.sessionId || `search_session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
   
   // ...existing code...
   
@@ -67,17 +63,6 @@ const searchProperties = async (params: z.infer<typeof inputSchema>): Promise<z.
     auth: { apiKey: elasticApiKey },
   });
   
-  // Check if LTR model is available for adaptive template usage
-  const checkLTRModelAvailable = async (modelName: string): Promise<boolean> => {
-    try {
-      await client.ml.getTrainedModels({ model_id: modelName });
-      return true;
-    } catch (error) {
-      console.log(`ℹ️  LTR model '${modelName}' not available, using baseline search`);
-      return false;
-    }
-  };
-  
   try {
     // Build the template parameters based on provided inputs
     const templateParams: Record<string, any> = {};
@@ -97,17 +82,7 @@ const searchProperties = async (params: z.infer<typeof inputSchema>): Promise<z.
     if (params.home_price) templateParams.home_price = params.home_price;
     if (params.query) templateParams.query = params.query;
     if (params.features) templateParams.features = params.features;
-    
-    // Check for adaptive LTR template usage
-    const ltrModelName = params.ltrModelName || 'home_search_ltr_model';
-    const isAdaptiveTemplate = searchTemplateId === 'properties-search-adaptive-ltr';
-    
-    if (isAdaptiveTemplate && params.enableLTR) {
-      // For adaptive template, check model availability and set parameters
-      const modelAvailable = await checkLTRModelAvailable(ltrModelName);
-      templateParams.ltr_model_available = modelAvailable;
-      templateParams.ltr_model_name = ltrModelName;
-    }
+  
 
     // Execute search using the search template
     const searchRequest: any = {
@@ -123,27 +98,6 @@ const searchProperties = async (params: z.infer<typeof inputSchema>): Promise<z.
     const total = searchResponse.hits.total as { value: number };
     const searchTimeMs = Date.now() - startTime;
 
-    // Log search session with unified logger
-    if (params.logInteractions) {
-      logger.info({
-        '@timestamp': new Date().toISOString(),
-        'event.action': 'agent_search',
-        'event.category': ['web'],
-        'event.outcome': 'success',
-        'user.id': params.userId,
-        'search.session_id': sessionId,
-        'search.query': params.query || 'filtered_search',
-        'search.results_count': total.value,
-        'search.template_id': searchTemplateId,
-        'search.ltr_enabled': params.enableLTR,
-        'performance.search_time_ms': searchTimeMs,
-        'performance.elasticsearch_time_ms': searchResponse.took,
-        'service': {
-          name: 'elasticsearch-search-tool'
-        }
-      });
-    }
-
     if (hits.length === 0) {
       return { 
         success: true, 
@@ -151,7 +105,6 @@ const searchProperties = async (params: z.infer<typeof inputSchema>): Promise<z.
         results: [],
         total: 0,
         sessionId,
-        ltrEnabled: params.enableLTR,
         searchTimeMs
       };
     }
@@ -167,6 +120,7 @@ const searchProperties = async (params: z.infer<typeof inputSchema>): Promise<z.
     });
     
     // Log individual search results with document IDs for LTR training
+    // Enhanced with full query metadata for consolidated LTR training (no need for separate agent_search events)
     if (params.logInteractions && formattedResults.length > 0) {
       for (const result of formattedResults) {
         logger.info({
@@ -179,13 +133,25 @@ const searchProperties = async (params: z.infer<typeof inputSchema>): Promise<z.
           'search.result': {
             document_id: result.id,
             position: result.position,
-            elasticsearch_score: result.score,
-            query: params.query || 'filtered_search'
+            elasticsearch_score: result.score
           },
-          'search.context': {
-            total_results: total.value,
-            template_id: searchTemplateId,
-            ltr_enabled: params.enableLTR
+          'search.query': params.query || 'filtered_search',
+          'search.results_count': total.value,
+          'search.template_id': searchTemplateId,
+          'performance.search_time_ms': searchTimeMs,
+          'performance.elasticsearch_time_ms': searchResponse.took,
+          // Include filter criteria for better feature extraction
+          'search.filters': {
+            bedrooms: params.bedrooms,
+            bathrooms: params.bathrooms,
+            maintenance: params.maintenance,
+            square_footage: params.square_footage,
+            home_price: params.home_price,
+            has_geo_filter: !!(params.latitude && params.longitude && params.distance),
+            latitude: params.latitude ? parseFloat(params.latitude) : undefined,
+            longitude: params.longitude ? parseFloat(params.longitude) : undefined,
+            distance: params.distance,
+            features: params.features
           },
           'service': {
             name: 'elasticsearch-search-tool'
@@ -200,12 +166,10 @@ const searchProperties = async (params: z.infer<typeof inputSchema>): Promise<z.
       results: formattedResults,
       total: total.value,
       sessionId,
-      ltrEnabled: params.enableLTR,
       searchTimeMs,
       details: {
         took: searchResponse.took,
-        timed_out: searchResponse.timed_out,
-        ltr_model_used: params.enableLTR ? 'home_search_ltr_model' : null
+        timed_out: searchResponse.timed_out
       }
     };
   } catch (error: any) {
@@ -219,7 +183,7 @@ const searchProperties = async (params: z.infer<typeof inputSchema>): Promise<z.
 
 export const elasticsearchSearchTool = createTool({
   id: 'elasticsearch-search-tool',
-  description: 'Advanced search for properties using Elasticsearch with LTR reranking, conversational detection, position-aware logging, and comprehensive observability features. Includes native Elasticsearch LTR integration and James\'s unified logger.',
+  description: 'Advanced search for properties using Elasticsearch with LTR reranking and observability features. Includes native Elasticsearch LTR integration and unified logger.',
   inputSchema,
   outputSchema,
   execute: async ({ context }) => {
