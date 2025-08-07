@@ -1,0 +1,137 @@
+{
+      "_source": false,
+      "size": 10,
+      "fields": [
+        "title",
+        "annual-tax",
+        "maintenance-fee",
+        "number-of-bathrooms",
+        "number-of-bedrooms",
+        "square-footage",
+        "home-price",
+        "property-features",
+        "property-description",
+        "geo_point"
+      ],
+      "retriever": {
+        "rescorer": {
+            "rescore": {
+                "window_size": 100,
+                "learning_to_rank": {
+                    "model_id": "home_search_ltr_model",
+                    "params": {
+                        "query_text": "{{query}}"
+                    }
+                }
+            },
+            "retriever": {
+                "linear": {
+                  "rank_window_size": 100,
+                  "filter": {
+                    "bool": {
+                      "must": [
+                        {{#distance}}{
+                          "geo_distance": {
+                            "distance": "{{distance}}",
+                            "location": {
+                              "lat": {{latitude}},
+                              "lon": {{longitude}}
+                            }
+                          }
+                        }{{/distance}}
+                        {{#bedrooms}}{{#distance}},{{/distance}}{
+                          "range": {
+                            "number-of-bedrooms": {
+                              "gte": {{bedrooms}}
+                            }
+                          }
+                        }{{/bedrooms}}
+                        {{#bathrooms}}{{#distance}}{{^bedrooms}},{{/bedrooms}}{{/distance}}{{#bedrooms}},{{/bedrooms}}{
+                          "range": {
+                            "number-of-bathrooms": {
+                              "gte": {{bathrooms}}
+                            }
+                          }
+                        }{{/bathrooms}}
+                        {{#tax}},{
+                          "range": {
+                            "annual-tax": {
+                              "lte": {{tax}}
+                            }
+                          }
+                        }{{/tax}}
+                        {{#maintenance}},{
+                          "range": {
+                            "maintenance-fee": {
+                              "lte": {{maintenance}}
+                            }
+                          }
+                        }{{/maintenance}}
+                        {{#square_footage}},{
+                          "range": {
+                            "square-footage": {
+                              "gte": {{square_footage}}
+                            }
+                          }
+                        }{{/square_footage}}
+                        {{#home_price}},{
+                          "range": {
+                            "home-price": {
+                              "lte": {{home_price}}
+                            }
+                          }
+                        }{{/home_price}}
+                      ]
+                    }
+                  },
+                  "retrievers": [
+                    {
+                      "retriever": {
+                        "standard": {
+                          "query": {
+                            "semantic": {
+                              "field": "property-description_semantic",
+                              "query": "{{query}}"
+                            }
+                          }
+                        }
+                      },
+                      "weight": 0.3,
+                      "normalizer": "minmax"
+                    },
+                    {
+                      "retriever": {
+                        "standard": {
+                          "query": {
+                            "semantic": {
+                              "field": "property-features_semantic",
+                              "query": "{{query}}"
+                            }
+                          }
+                        }
+                      },
+                      "weight": 0.3,
+                      "normalizer": "minmax"
+                    }
+                    {{#features}},
+                    {
+                      "retriever": {
+                        "standard": {
+                          "query": {
+                            "multi_match": {
+                              "query": "{{features}}",
+                              "fields": ["property-features", "property-features.keyword"]
+                            }
+                          }
+                        }
+                      },
+                      "weight": 0.7,
+                      "normalizer": "minmax"
+                    }
+                    {{/features}}
+                  ]
+                }
+            }
+        }
+      }
+    }
