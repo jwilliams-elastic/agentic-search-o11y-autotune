@@ -148,18 +148,18 @@ class UnifiedDataStreamLTRTrainer:
         self.training_examples = []
     
     def has_enough_interactions(self, min_interactions: int = int(os.getenv('LTR_MIN_INTERACTIONS', 100))) -> bool:
-        """Check if there are enough agent_user_interactions events in the data stream"""
+        """Check if there are enough property_engagement events in the data stream (aligned with new schema)"""
         try:
             query = {
                 "query": {
                     "term": {
-                        "custom.event.action": "agent_user_interactions"
+                        "custom.event.action": "property_engagement"
                     }
                 }
             }
             result = self.es_client.count(index=self.data_stream, body=query)
             count = result.get('count', 0)
-            print(f"🔎 Found {count} agent_user_interactions events in '{self.data_stream}'")
+            print(f"🔎 Found {count} property_engagement events in '{self.data_stream}'")
             return count >= min_interactions
         except Exception as e:
             print(f"❌ Failed to count interaction events: {e}")
@@ -543,79 +543,64 @@ class UnifiedDataStreamLTRTrainer:
         }
             
     def extract_search_results(self):
-        """Extract search_result_logged events to get both document IDs and query metadata"""
+        """Extract search_result_logged events to get both document IDs and query metadata (aligned with new schema)"""
         print("📊 Extracting search result events from unified data stream...")
-        
         results_query = self._build_events_query("search_result_logged", 10000)
-        
         try:
             response = self.es_client.search(
                 index=self.data_stream,
                 body=results_query
             )
-            
             # Create two lookups:
             # 1. session_id -> position -> document_id
             # 2. session_id -> metadata (query, template_id, search_time, etc.)
             results_lookup, query_metadata = self._process_search_results(response)
-            
             print(f"✅ Found {len(results_lookup)} sessions with search results")
             print(f"✅ Extracted query metadata for {len(query_metadata)} sessions")
             return results_lookup, query_metadata
-            
         except Exception as e:
             print(f"❌ Failed to extract search results: {e}")
             return {}, {}
     
     def _process_search_results(self, response):
-        """Process search results to build lookup dictionaries for both document IDs and query metadata"""
+        """Process search results to build lookup dictionaries for both document IDs and query metadata (aligned with new schema)"""
         results_lookup = {}
         query_metadata = {}
-        
         for hit in response['hits']['hits']:
             source = hit['_source']
-            if 'custom' in source:
-                custom = source['custom']
-                search_data = custom.get('search', {})
-                session_id = search_data.get('session_id')
-                position = search_data.get('result', {}).get('position')
-                doc_id = search_data.get('result', {}).get('document_id')
-                
-                # Extract document ID mapping
-                if session_id and position and doc_id:
-                    if session_id not in results_lookup:
-                        results_lookup[session_id] = {}
-                    # Validate the document ID
-                    if self._validate_document_id(doc_id):
-                        results_lookup[session_id][position] = doc_id
-                
-                # Extract query metadata (only once per session)
-                if session_id and session_id not in query_metadata:
-                    # Get query metadata from the result event
-                    query = search_data.get('query', '')
-                    results_count = search_data.get('results_count', 0)
-                    template_id = search_data.get('template_id', '')
-                    search_time = source.get('performance', {}).get('search_time_ms', 100)
-                    
-                    # Extract filter information
-                    filters = search_data.get('filters', {})
-                    has_geo_filter = filters.get('has_geo_filter', False)
-                    has_price_filter = filters.get('home_price') is not None
-                    has_bedroom_filter = filters.get('bedrooms') is not None
-                    
-                    # Store metadata for this session
-                    query_metadata[session_id] = {
-                        'query': query,
-                        'results_count': results_count,
-                        'search_time': search_time,
-                        'template_id': template_id,
-                        'timestamp': source.get('@timestamp'),
-                        'has_geo_filter': has_geo_filter,
-                        'has_price_filter': has_price_filter, 
-                        'has_bedroom_filter': has_bedroom_filter,
-                        'search_event': custom  # Store the full event for additional metadata
-                    }
-        
+            # Use nested access for custom.* fields (new schema)
+            custom = source.get('custom', {})
+            session_id = custom.get('session', {}).get('id')
+            result = custom.get('result', {})
+            position = result.get('position')
+            doc_id = result.get('document_id')
+            # Extract document ID mapping
+            if session_id and position and doc_id:
+                if session_id not in results_lookup:
+                    results_lookup[session_id] = {}
+                if self._validate_document_id(doc_id):
+                    results_lookup[session_id][position] = doc_id
+            # Extract query metadata (only once per session)
+            if session_id and session_id not in query_metadata:
+                query = custom.get('query', {}).get('text', '')
+                results_count = custom.get('query', {}).get('result_count', 0)
+                template_id = custom.get('query', {}).get('template_id', '')
+                search_time = custom.get('performance', {}).get('search_time_ms', 100)
+                filters = custom.get('query', {}).get('filters', {})
+                has_geo_filter = bool(filters.get('geo'))
+                has_price_filter = filters.get('home_price') is not None
+                has_bedroom_filter = filters.get('bedrooms') is not None
+                query_metadata[session_id] = {
+                    'query': query,
+                    'results_count': results_count,
+                    'search_time': search_time,
+                    'template_id': template_id,
+                    'timestamp': source.get('@timestamp'),
+                    'has_geo_filter': has_geo_filter,
+                    'has_price_filter': has_price_filter,
+                    'has_bedroom_filter': has_bedroom_filter,
+                    'search_event': source  # Store the full event for additional metadata
+                }
         return results_lookup, query_metadata
     
     def _validate_document_id(self, doc_id):
@@ -631,9 +616,9 @@ class UnifiedDataStreamLTRTrainer:
             return False
             
     def extract_interaction_events(self):
-        """Extract agent_user_interactions events from unified data stream"""
+        """Extract property_engagement events from unified data stream (aligned with new schema)"""
         print("📊 Extracting interaction events from unified data stream...")
-        return self._extract_events_by_action("agent_user_interactions", 1000)
+        return self._extract_events_by_action("property_engagement", 1000)
     
     def _build_events_query(self, action_type, size=1000):
         """Build a query for extracting events by action type"""
@@ -651,46 +636,22 @@ class UnifiedDataStreamLTRTrainer:
         }
     
     def _extract_events_by_action(self, action_type, size=1000):
-        """Generic method to extract events by action type"""
+        """Generic method to extract events by action type (aligned with new schema)"""
         query = self._build_events_query(action_type, size)
-        
         try:
             response = self.es_client.search(
                 index=self.data_stream,
                 body=query
             )
-            
             events = []
             for hit in response['hits']['hits']:
                 source = hit['_source']
-                
-                # Handle both structures - events inside 'custom' and top-level events
-                if 'custom' in source:
-                    events.append(source['custom'])
-                else:
-                    # For direct event structure (not inside custom)
-                    event_data = {}
-                    
-                    # Extract search and interaction data from the source
-                    if 'search' in source:
-                        event_data['search'] = source['search']
-                    if 'event' in source:
-                        event_data['event'] = source['event']
-                    if 'user' in source:
-                        event_data['user'] = source['user']
-                    
-                    # Only add if we have meaningful data
-                    if event_data:
-                        events.append(event_data)
-                    
+                # For new schema, just append the top-level event
+                events.append(source)
             print(f"✅ Found {len(events)} {action_type} events")
-            
-            # Debug output for understanding event structure
             if events:
                 print(f"Sample event structure: {json.dumps(events[0], indent=2)[:200]}...")
-                
             return events
-            
         except Exception as e:
             print(f"❌ Failed to extract {action_type} events: {e}")
             return []
@@ -710,38 +671,27 @@ class UnifiedDataStreamLTRTrainer:
         return training_examples
         
     def _build_interaction_lookup(self, interaction_events):
-        """Create lookup structure for interaction events by session_id and document_id"""
+        """Create lookup structure for interaction events by session_id and document_id (aligned with new schema)"""
         interaction_lookup = {}
         for event in interaction_events:
-            # Check both custom.search and top-level search paths
-            session_id = event.get('search', {}).get('session_id')
-            
-            # Try to get document ID from multiple possible paths
-            doc_id = None
-            if event.get('search', {}).get('interaction', {}).get('document_id'):
-                doc_id = event.get('search', {}).get('interaction', {}).get('document_id')
-            
-            # Try to get position from multiple possible paths
-            position = 0
-            if event.get('search', {}).get('interaction', {}).get('position'):
-                position = event.get('search', {}).get('interaction', {}).get('position')
-            
+            # Use nested access for custom.* fields
+            custom = event.get('custom', {})
+            session_id = custom.get('session', {}).get('id')
+            result = custom.get('result', {})
+            doc_id = result.get('document_id')
+            position = result.get('position', 0)
+            interaction = custom.get('interaction', {})
+            interaction_type = interaction.get('type', '')
             print(f"Processing interaction: session_id={session_id}, doc_id={doc_id}, position={position}")
-            
             if session_id and doc_id:
                 key = f"{session_id}_{doc_id}"
                 if key not in interaction_lookup:
                     interaction_lookup[key] = []
-                
-                # Get interaction type from multiple possible paths
-                interaction_type = event.get('search', {}).get('interaction', {}).get('type', '')
-                
                 interaction_lookup[key].append({
                     'position': position,
                     'type': interaction_type,
-                    'conversational': event.get('agent', {}).get('conversational_detection', False)
+                    'conversational': False  # No conversational_detection in new schema by default
                 })
-                
                 print(f"Added interaction to lookup: key={key}, type={interaction_type}, position={position}")
         return interaction_lookup
         
@@ -1106,7 +1056,7 @@ class UnifiedDataStreamLTRTrainer:
             # Also identify and scale up position_engagement_signal for more influence
             try:
                 engagement_feature_idx = self.feature_names.index('position_engagement_signal')
-                engagement_multiplier = 3.0
+                engagement_multiplier = 1.0
                 X_train_modified[:, engagement_feature_idx] *= engagement_multiplier
                 X_test_modified[:, engagement_feature_idx] *= engagement_multiplier
                 print(f"✅ Amplified position_engagement_signal by {engagement_multiplier}x to increase its importance")

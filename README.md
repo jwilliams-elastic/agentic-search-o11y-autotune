@@ -39,13 +39,10 @@ npm install
 
 ### ⚙️ Setup
 
-1. Create 2 serverless projects
+1. Create 1 serverless project
    - Elasticsearch optimized for vectors 
       - you will need to obtain URL for `.env` `ELASTIC_URL` entry
       - you will need to create an API key for `.env` `ELASTIC_API_KEY` entry 
-   - Elastic for Observability
-      - you will need to obtain URL for `elastic-agent-reference.yml` `hosts` config
-      - you will need to create an API key for `elastic-agent-reference.yml` `api_key` config
 
 1. Create a `.env` file:
 
@@ -53,10 +50,7 @@ npm install
 cp .env.example .env
 ```
 
-2. Populate `.env` with values for:
-   - OpenAI API Key
-   - Elasticsearch endpoint/credentials
-   - Absolulte path for data file
+2. Populate `.env` with values for all variables that start with "YOUR"
 
 3. Import `sample_kibana_dashboard.ndjson` into your elasticsearch environment
    - Open Kibana and navigate to Stack Management -> Saved Objects
@@ -78,16 +72,28 @@ cp .env.example .env
 
 1. Open http://localhost:4111/workflows
 2. Run 'elastic-setup-workflow' (.env file has default values but you can override in mastra UI)
+3. Run 'search-autotune-workflow' (there is a LOW and HIGH option that toggles LTR behavior)
 3. Open http://localhost:4111/agents
-4. Test the home search agent with a query like "homes 10mi from disney world fl under 500K"
-5. Open the "Agentic Search Analytics" dashboard in kibana to see usage details 
+4. Show the difference b/t LTR and no-LTR results with a query like "family home in Florida"
+5. Open the "Agentic Search Analytics" dashboard - KPIs like CTR, Average Click Position and search template usage.
+
+### Autotune Search Queries
+Depending on the autotune settings, the following queries should return different results.
+LOW - 3 beds, 2 baths, low maintanence, low price
+HIGH - 5 beds, 4 baths, high maintenance, high price
+
+"family home in Florida"
+"affordable home near schools"
+"single family property under 400k"
+"home with good value"
 
 ## 🧪 Development Notes
 
-- Code is written in [TypeScript](https://www.typescriptlang.org/)
+- Most code is vibe coded in [TypeScript](https://www.typescriptlang.org/)
 - Mastra workflows and tools live in `/src`
 - Logs use [pino-pretty](https://github.com/pinojs/pino-pretty) during development
-- Logs are shipped to Elasticsearch (can be same or different from search cluster)
+- Logs are shipped to an elasticsearch datastream running in the same serverless project
+- LTR script is written in Python with a mastra tool wrapper for invocation
 
 ---
 
@@ -95,13 +101,38 @@ cp .env.example .env
 
 ```
 agentic-search-o11y-autotune/
-├── src/                               # Mastra tools & workflows
-├── .env.example                       # Template for env vars
-├── package.json                       # Project metadata and scripts
-├── tsconfig.json                      # TypeScript config
-├── elastic-agent-reference.yml        # Sample elastic agent config for search analytics
+├── src/                      # Mastra tools, agents, workflows, and utilities (TypeScript)
+│   └── mastra/
+│       ├── index.ts
+│       ├── logger.ts
+│       ├── logger-agentless.ts
+│       ├── agents/
+│       ├── tools/
+│       └── workflows/
+├── python/                   # Python scripts for LTR, feature analysis, and plotting
+│   ├── plot_feature_importance.py
+│   ├── properties-learn-to-rank.py
+│   └── requirements.txt
+├── models/                   # ML models, scalers, and metadata
+│   ├── feature_importance.png
+│   ├── feature_scaler.pkl
+│   ├── home_search_ltr_model.json
+│   ├── ltr_model_metadata.json
+│   └── xgboost_ltr_model.json
+├── data/                     # Data files and JSONL property data
+│   └── properties.jsonl
+├── search_templates/         # Mustache templates for ES search
+│   ├── properties-search-v1.mustache
+│   ├── properties-search-v2.mustache
+│   ├── properties-search-v3.mustache
+│   └── properties-search-v4.mustache
+├── event.schema              # Event schema for analytics
+├── feature_importance_analysis.ipynb  # Jupyter notebook for feature analysis
 ├── sample_kibana_dashboard.ndjson     # Sample kibana dashboard for search analytics
-└── README.md            # You're here
+├── mastra.config.js          # Mastra project config
+├── package.json              # Project metadata and scripts
+├── tsconfig.json             # TypeScript config
+└── README.md                 # You're here
 ```
 
 ---
@@ -110,39 +141,10 @@ agentic-search-o11y-autotune/
 
 This demo includes:
 
-- Search event logging (Mastra logger + pino)
+- Search event logging (Mastra logger + pino -> Elasticsearch datastream)
 - Search tuning hooks
 - Elasticsearch query templates
 - Basic analytics-ready output for ES|QL dashboards
-
----
-
-## 🧪 Test Data & Monitoring
-
-You can ship logs to an Elasticsearch instance using a local elastic-agent. The agent can be downloaded from [here](https://www.elastic.co/downloads/elastic-agent).
-
-You can use [elastic-agent-reference.yml](./elastic-agent-reference.yml) to configure the agent. You will need to specify values for any entries that start with "YOUR" 
-
-```bash
-./elastic-agent run
-```
-
-And inspect logs or trace behavior as needed.
-
----
-
-## 🧩 Mastra Version Compatibility
-
-This project uses:
-
-- `mastra@^0.10.12`
-- Be sure to install the CLI globally if needed:
-
-```bash
-npm install -g mastra
-```
-
----
 
 ## 🙋‍♀️ Questions or Issues?
 
@@ -154,76 +156,68 @@ Create a github issue or email repo maintainers.
 
 **NEW: Production-ready LTR system with observability-driven ranking!**
 
-### **🏆 System Achievements:**
-- ✅ **92.6% NDCG@5** - Industry-leading model performance
-- ✅ **45 Advanced Features** - Comprehensive feature engineering
-- ✅ **Real-time Learning** - Continuous model improvement
-- ✅ **Intelligent Confidence Scoring** - Pattern-based conversational detection
-- ✅ **100% System Health** - All components operational
-
-### **🚀 LTR Quick Start:**
-
-```bash
-# Test complete LTR system
-npx tsx test-complete-ltr-system.ts
-
-# Check data stream logs
-python check-logs.py
-
-# Train LTR model
-python unified-datastream-ltr-trainer.py
-```
-
 ### **🎪 Key LTR Features:**
-
-#### **🧠 Conversational Intelligence:**
-- Detects: "Tell me about the first property" → Position 1 click
-- Pattern-based confidence scoring (0.5-1.0)
-- Automatic interaction logging
 
 #### **📡 Observability-Driven:**
 - ECS-compliant structured logging
 - Real-time feature extraction from user behavior
 - Elasticsearch Data Streams: `logs-agentic-search-o11y-autotune.events`
 
-#### **🎯 Advanced ML:**
-- 45 engineered features (position-aware, template complexity, etc.)
-- Position bias correction for fair ranking
-- Continuous learning from real user interactions
+#### **🧬 Feature Engineering (from `properties-learn-to-rank.py`):**
+- **Position-aware features:** Result position, log/reciprocal position, position bias, and engagement at position.
+- **Search performance:** Elasticsearch score, search time, and template complexity.
+- **Query analysis:** Query length, word count, complexity, and presence of geo/price/bedroom filters.
+- **User interaction:** Click/view counts, interaction rate, conversational detection, and engagement score.
+- **Session context:** Query count, average position, and session duration.
+- **Text relevance:** Overlap and exact match between query and property title/description.
+- **BM25 relevance:** Field-specific BM25 scores (title, description, features, headings, combined).
+- **Semantic similarity:** Embedding-based similarity between query and property description/features.
+- **Property attributes:** Normalized price, bedroom/bathroom match, square footage, tax, and maintenance.
+- **Geo-relevance:** Estimated distance, geo relevance, and neighborhood match.
+- **Query-document matching:** Exact/partial matches and status relevance (e.g., active listings).
 
-### **📊 ESQL Query Examples:**
+These features are extracted and engineered from both search and engagement events, then used to train and evaluate the LTR model for property search ranking.
 
-```sql
--- Recent LTR Activity
-FROM .ds-logs-agentic-search-o11y-autotune.events-2025.07.23-000001
-| WHERE `custom.event.action` IN ("agent_search", "agent_user_interactions")
-| SORT `@timestamp` DESC | LIMIT 20
-
--- High Confidence Interactions
-FROM .ds-logs-agentic-search-o11y-autotune.events-2025.07.23-000001
-| WHERE `custom.agent.confidence_score` > 0.8
-| KEEP `custom.agent.confidence_score`, `custom.search.interaction.original_message`
-```
-
-### **🔧 LTR Production Usage:**
-
-```typescript
-// Search Agent (Zero Breaking Changes)
-const result = await homeSearchAgentWithTracking.run({
-  message: "Find me a modern apartment downtown",
-  userId: "user_123"
-});
-// LTR reranking and logging happen automatically
-
-// Direct Search Tool
-const search = await elasticsearchSearchTool.execute({
-  context: {
-    userId: 'user_123',
-    query: 'luxury condo',
-    enableLTR: true,
-    logInteractions: true
-  }
-});
+##### Event Schema
+```json
+{
+  "@timestamp": "2025-08-08T12:34:56Z",
+  "event.action": "search_result_logged",         // or "property_engagement"
+  "event.type": "search",                        // or "engagement"
+  "event.category": ["search"],                  // or ["user"]
+  "event.outcome": "success",
+  "user.id": "user-123",
+  "session.id": "session-abc",                   // flat, for easy filtering/joining
+  "query.text": "2 bedroom in Brooklyn",
+  "query.template_id": "properties-search-v3",
+  "query.filters": {
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "maintenance": 500,
+    "square_footage": 800,
+    "home_price": 1000000,
+    "geo": {
+      "latitude": 40.6782,
+      "longitude": -73.9442,
+      "distance": "10km"
+    },
+    "features": "balcony"
+  },
+  "result": {
+    "document_id": "property-456",
+    "position": 1,
+    "elasticsearch_score": 12.34
+  },
+  "interaction": {
+    "type": "property_engagement",               // only for engagement events
+    "original_message": "I like this one"
+  },
+  "performance": {
+    "search_time_ms": 123,
+    "elasticsearch_time_ms": 100
+  },
+  "service.name": "elasticsearch-search-tool"
+}
 ```
 
 ### **📚 LTR Documentation:**
@@ -233,7 +227,6 @@ const search = await elasticsearchSearchTool.execute({
 - **[Feature Logs](./search-feature-logs.md)** - Feature extraction reference
 
 ### **🎉 LTR Business Value:**
-- **Enhanced Search Relevance**: ML-driven ranking beats baseline by 15-20%
 - **Real-time Learning**: Continuous improvement from user behavior
 - **Zero Breaking Changes**: Seamless integration with existing search
 - **Production-Ready**: Enterprise-grade logging and error handling
