@@ -1,0 +1,39 @@
+{
+  "@timestamp": "2025-08-08T12:34:56Z",
+  "event.action": "search_result_logged",         // or "property_engagement"
+  "event.type": "search",                        // or "engagement"
+  "event.category": ["search"],                  // or ["user"]
+  "event.outcome": "success",
+  "user.id": "user-123",
+  "session.id": "session-abc",                   // flat, for easy filtering/joining
+  "query.text": "2 bedroom in Brooklyn",
+  "query.template_id": "properties-search-v3",
+  "query.result_count": 25,
+  "query.filters": {
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "maintenance": 500,
+    "square_footage": 800,
+    "home_price": 1000000,
+    "geo": {
+      "latitude": 40.6782,
+      "longitude": -73.9442,
+      "distance": "10km"
+    },
+    "features": "balcony"
+  },
+  "result": {
+    "document_id": "property-456",
+    "position": 1,
+    "elasticsearch_score": 12.34
+  },
+  "interaction": {
+    "type": "property_engagement",               // only for engagement events
+    "original_message": "I like this one"
+  },
+  "performance": {
+    "search_time_ms": 123,
+    "elasticsearch_time_ms": 100
+  },
+  "service.name": "elasticsearch-search-tool"
+}

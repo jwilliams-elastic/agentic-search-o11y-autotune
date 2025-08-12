@@ -4,10 +4,6 @@ import { z } from 'zod';
 import { fileLogger, logger } from '../logger-agentless';
 import { config } from 'dotenv';
 
-// Auto-training thresholds - easily configurable
-const MIN_SEARCH_EVENTS = 15;   // Minimum search events before triggering auto-training
-const MIN_INTERACTION_EVENTS = 8; // Minimum interaction events before triggering auto-training
-
 config();
 
 const inputSchema = z.object({
@@ -126,36 +122,37 @@ const searchProperties = async (params: z.infer<typeof inputSchema>): Promise<z.
         logger.info({
           '@timestamp': new Date().toISOString(),
           'event.action': 'search_result_logged',
+          'event.type': 'search',
           'event.category': ['search'],
           'event.outcome': 'success',
           'user.id': params.userId,
-          'search.session_id': sessionId,
-          'search.result': {
-            document_id: result.id,
-            position: result.position,
-            elasticsearch_score: result.score
-          },
-          'search.query': params.query || 'filtered_search',
-          'search.results_count': total.value,
-          'search.template_id': searchTemplateId,
-          'performance.search_time_ms': searchTimeMs,
-          'performance.elasticsearch_time_ms': searchResponse.took,
-          // Include filter criteria for better feature extraction
-          'search.filters': {
+          'session.id': sessionId,
+          'query.text': params.query || 'filtered_search',
+          'query.template_id': searchTemplateId,
+          'query.result_count': total.value,
+          'query.filters': {
             bedrooms: params.bedrooms,
             bathrooms: params.bathrooms,
             maintenance: params.maintenance,
             square_footage: params.square_footage,
             home_price: params.home_price,
-            has_geo_filter: !!(params.latitude && params.longitude && params.distance),
-            latitude: params.latitude ? parseFloat(params.latitude) : undefined,
-            longitude: params.longitude ? parseFloat(params.longitude) : undefined,
-            distance: params.distance,
+            geo: params.latitude && params.longitude && params.distance ? {
+              latitude: params.latitude ? parseFloat(params.latitude) : undefined,
+              longitude: params.longitude ? parseFloat(params.longitude) : undefined,
+              distance: params.distance
+            } : undefined,
             features: params.features
           },
-          'service': {
-            name: 'elasticsearch-search-tool'
-          }
+          'result': {
+            document_id: result.id,
+            position: result.position,
+            elasticsearch_score: result.score
+          },
+          'performance': {
+            search_time_ms: searchTimeMs,
+            elasticsearch_time_ms: searchResponse.took
+          },
+          'service.name': 'elasticsearch-search-tool'
         });
       }
     }

@@ -2,23 +2,41 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { logger } from '../logger-agentless';
 
-function logPropertyEngagement(userId: string, sessionId: string, message: string, position: number, documentId: string) {
+function logPropertyEngagement({
+  userId,
+  sessionId,
+  message,
+  position,
+  documentId,
+  lastSearchResults
+}: {
+  userId: string,
+  sessionId: string,
+  message: string,
+  position: number,
+  documentId: string,
+  lastSearchResults: Array<{ id: string; title: string; position: number }>
+}) {
   logger.info({
     '@timestamp': new Date().toISOString(),
-    'event.action': 'agent_user_interactions',
+    'event.action': 'property_engagement',
+    'event.type': 'engagement',
     'event.category': ['user'],
     'event.outcome': 'success',
     'user.id': userId,
-    'search.session_id': sessionId,
-    'search.interaction': {
+    'session.id': sessionId,
+    'query.text': lastSearchResults && lastSearchResults.length > 0 ? lastSearchResults[0].title : undefined,
+    'query.template_id': undefined, // Not available in this context
+    'query.result_count': lastSearchResults ? lastSearchResults.length : undefined,
+    'result': {
       document_id: documentId,
-      position: position,
+      position: position
+    },
+    'interaction': {
       type: 'property_engagement',
       original_message: message
     },
-    'service': {
-      name: 'mock-property-engagement-tool'
-    }
+    'service.name': 'mock-property-engagement-tool'
   });
 }
 
@@ -57,13 +75,14 @@ export const mockPropertyEngagementTool = createTool({
     const sessionId = context.sessionId || `mock_session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     
     // Log the engagement
-    logPropertyEngagement(
-      context.userId,
+    logPropertyEngagement({
+      userId: context.userId,
       sessionId,
-      context.userMessage,
-      context.position,
-      context.documentId
-    );
+      message: context.userMessage,
+      position: context.position,
+      documentId: context.documentId,
+      lastSearchResults: context.lastSearchResults
+    });
     
     // Return the engagement event
     const event = {
