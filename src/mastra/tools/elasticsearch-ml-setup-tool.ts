@@ -10,7 +10,7 @@ const inputSchema = z.object({
   inferenceId: z.string().optional().describe('ID for the inference endpoint. Defaults to INFERENCE_ID from .env'),
   elasticApiKey: z.string().optional().describe('Elasticsearch API Key. Defaults to ELASTIC_API_KEY from .env'),
   modelId: z.string().optional().describe('Model ID for the text embedding. Defaults to MODEL_ID from .env'),
-  numAllocations: z.number().optional().describe('Number of allocations for the inference endpoint.'),
+  numAllocations: z.number().default(4).optional().describe('Number of allocations for the inference endpoint. Defaults to 4.'),
 });
 
 const outputSchema = z.object({

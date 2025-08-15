@@ -9,14 +9,14 @@ import { z } from 'zod';
 import { createStep } from '@mastra/core/workflows';
 
 const workflowInputSchema = z.object({
-  indexName: z.string().optional(),
-  elasticUrl: z.string().url().optional(),
-  elasticApiKey: z.string().optional(),
-  dataFile: z.string().optional(),
-  inferenceId: z.string().optional(),
-  modelId: z.string().optional(),
-  numAllocations: z.number().optional(),
-  templatesDir: z.string().optional()
+  indexName: z.string().optional().describe('Name for the Elasticsearch index. Defaults to INDEX_NAME from .env'),
+  elasticUrl: z.string().url().optional().describe('Base URL of the Elasticsearch instance. Defaults to ELASTIC_URL from .env'),
+  inferenceId: z.string().optional().describe('ID for the inference endpoint. Defaults to INFERENCE_ID from .env'),
+  elasticApiKey: z.string().optional().describe('Elasticsearch API Key. Defaults to ELASTIC_API_KEY from .env'),
+  modelId: z.string().optional().describe('Model ID for the text embedding. Defaults to MODEL_ID from .env'),
+  dataFile: z.string().optional().describe('Path to the JSONL data file. Defaults to DATA_FILE from .env'),
+  numAllocations: z.number().default(4).optional().describe('Number of allocations for the inference endpoint. Defaults to 4.'),
+  templatesDir: z.string().optional().describe('Absolute path to the directory containing search template files (.mustache). Defaults to SEARCH_TEMPLATES_DIR from .env')
 });
 
 const workflowOutputSchema = z.object({

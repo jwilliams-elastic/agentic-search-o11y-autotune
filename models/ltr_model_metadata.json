@@ -1,8 +1,8 @@
 {
   "model_id": "home_search_ltr_model",
   "type": "xgboost",
-  "feature_count": 46,
-  "created_at": "2025-08-12T18:30:50.526381",
+  "feature_count": 48,
+  "created_at": "2025-08-15T15:25:38.208754",
   "features": [
     "position",
     "position_log",
@@ -43,6 +43,8 @@
     "square_footage_normalized",
     "annual_tax_normalized",
     "maintenance_fee_normalized",
+    "price_value_competitiveness",
+    "absolute_price_tier",
     "geo_distance_km",
     "geo_relevance_score",
     "same_neighborhood",
