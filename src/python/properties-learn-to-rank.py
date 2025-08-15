@@ -74,7 +74,7 @@ class UnifiedDataStreamLTRTrainer:
         self.model = None
         self.scaler = StandardScaler()
         
-        # Enhanced feature names for XGBoost training (40+ features)
+        # Enhanced feature names for XGBoost training (42+ features)
         self.feature_names = [
             # Position-aware features
             'position',
@@ -113,32 +113,34 @@ class UnifiedDataStreamLTRTrainer:
             'description_query_overlap',
             'exact_match_score',
             
-            # NEW: BM25 Relevance Features
+            # BM25 Relevance Features
             'bm25_title_score',
             'bm25_description_score',
             'bm25_features_score',
             'bm25_headings_score',
             'bm25_combined_score',
             
-            # NEW: Semantic Similarity Features
+            # Semantic Similarity Features
             'semantic_description_similarity',
             'semantic_features_similarity',
             'semantic_query_embedding_match',
             
-            # NEW: Property Attribute Features
+            # Property Attribute Features
             'property_price_normalized',
             'bedrooms_match_score',
             'bathrooms_match_score',
             'square_footage_normalized',
             'annual_tax_normalized',
             'maintenance_fee_normalized',
+            'price_value_competitiveness',
+            'absolute_price_tier',
             
-            # NEW: Geo-Relevance Features
+            # Geo-Relevance Features
             'geo_distance_km',
             'geo_relevance_score',
             'same_neighborhood',
             
-            # NEW: Query-Document Matching Features
+            # Query-Document Matching Features
             'title_query_exact_match',
             'description_query_coverage',
             'features_query_overlap',
@@ -146,6 +148,7 @@ class UnifiedDataStreamLTRTrainer:
         ]
         
         self.training_examples = []
+        self.property_cache = {}  # Add a cache for property documents
     
     def has_enough_interactions(self, min_interactions: int = int(os.getenv('LTR_MIN_INTERACTIONS', 100))) -> bool:
         """Check if there are enough property_engagement events in the data stream (aligned with new schema)"""
@@ -429,6 +432,50 @@ class UnifiedDataStreamLTRTrainer:
             maintenance_fee = property_data.get('maintenance-fee', 0)
             features['maintenance_fee_normalized'] = min(maintenance_fee / 500, 2.0)  # Monthly fee scale
             
+            # Add a direct price comparison feature to strengthen the bias toward lower prices
+            # This will heavily penalize properties that are more expensive than typical for their size/location
+            try:
+                # Calculate a price-to-value ratio using square footage as a proxy for value
+                price_per_sqft = property_data.get('home-price', 0) / max(1, property_data.get('square-footage', 1000))
+                
+                # Define reasonable price per square foot thresholds
+                # For Florida 3/2 homes in 2023-2024
+                if property_data.get('state') == 'FL' and property_data.get('number-of-bedrooms') == 3:
+                    threshold_sqft_price = 200  # $200/sqft benchmark for Florida 3/2 homes
+                    
+                    # Calculate a price competitiveness score (higher is better/lower price)
+                    if price_per_sqft <= threshold_sqft_price * 0.7:  # 30% below benchmark - exceptional value
+                        price_value_score = 1.0
+                    elif price_per_sqft <= threshold_sqft_price * 0.85:  # 15% below benchmark - good value
+                        price_value_score = 0.8
+                    elif price_per_sqft <= threshold_sqft_price:  # At or slightly below benchmark - fair value
+                        price_value_score = 0.6
+                    elif price_per_sqft <= threshold_sqft_price * 1.15:  # 15% above benchmark - fair but expensive
+                        price_value_score = 0.3
+                    else:  # More than 15% above benchmark - overpriced
+                        price_value_score = 0.1
+                else:
+                    price_value_score = 0.5  # Neutral for non-target properties
+                
+                # Add the price competitiveness feature
+                features['price_value_competitiveness'] = price_value_score
+                
+                # Provide additional context about absolute price
+                if property_data.get('home-price', 0) <= 275000:
+                    features['absolute_price_tier'] = 1.0  # Very affordable
+                elif property_data.get('home-price', 0) <= 350000:
+                    features['absolute_price_tier'] = 0.8  # Affordable
+                elif property_data.get('home-price', 0) <= 400000:
+                    features['absolute_price_tier'] = 0.5  # Moderate
+                elif property_data.get('home-price', 0) <= 500000:
+                    features['absolute_price_tier'] = 0.3  # Expensive
+                else:
+                    features['absolute_price_tier'] = 0.1  # Very expensive
+            except Exception as e:
+                print(f"⚠️ Price comparison feature calculation failed: {e}")
+                features['price_value_competitiveness'] = 0.5
+                features['absolute_price_tier'] = 0.5
+            
             return features
             
         except Exception as e:
@@ -474,21 +521,21 @@ class UnifiedDataStreamLTRTrainer:
             title = property_data.get('title', '').lower()
             description = property_data.get('property-description', '').lower()
             features = property_data.get('property-features', '').lower()
-            status = property_data.get('property-status', '').lower()
+            status = property_data.get('property-status', '').lower();
             
             # Exact match in title
-            title_exact_match = 1.0 if query_lower in title else 0.0
+            title_exact_match = 1.0 if query_lower in title else 0.0;
             
             # Query coverage in description
-            desc_tokens = set(description.split())
-            coverage = len(query_tokens & desc_tokens) / max(len(query_tokens), 1)
+            desc_tokens = set(description.split());
+            coverage = len(query_tokens & desc_tokens) / max(len(query_tokens), 1);
             
             # Features overlap
-            features_tokens = set(features.split())
-            features_overlap = len(query_tokens & features_tokens) / max(len(query_tokens), 1)
+            features_tokens = set(features.split());
+            features_overlap = len(query_tokens & features_tokens) / max(len(query_tokens), 1);
             
             # Status relevance (active listings preferred)
-            status_relevance = 1.0 if 'active' in status or 'available' in status else 0.7
+            status_relevance = 1.0 if 'active' in status or 'available' in status else 0.7;
             
             return {
                 'title_query_exact_match': title_exact_match,
@@ -533,6 +580,8 @@ class UnifiedDataStreamLTRTrainer:
             'square_footage_normalized': 0.5,
             'annual_tax_normalized': 0.5,
             'maintenance_fee_normalized': 0.5,
+            'price_value_competitiveness': 0.5,
+            'absolute_price_tier': 0.5,
             'geo_distance_km': 10.0,
             'geo_relevance_score': 0.5,
             'same_neighborhood': 0.0,
@@ -816,11 +865,19 @@ class UnifiedDataStreamLTRTrainer:
         }
     
     def _enrich_features_with_property_data(self, features, doc_id, query):
-        """Enrich features with property-specific data"""
         try:
-            property_features = self.enrich_with_property_data(doc_id, query)
-            features.update(property_features)
-            print(f"✅ Successfully enriched document {doc_id} with {len(property_features)} property features")
+            # Use cache to avoid repeated ES calls for the same property
+            if doc_id in self.property_cache:
+                property_data = self.property_cache[doc_id]
+            else:
+                doc_response = self.es_client.get(index='properties', id=doc_id)
+                property_data = doc_response['_source']
+                self.property_cache[doc_id] = property_data
+            # Remove all custom property profile scoring (no low_mode_match_score, high_mode_match_score, etc.)
+            # Only enrich with property features as extracted
+            for key, value in property_data.items():
+                if key not in features:
+                    features[key] = value
         except Exception as e:
             print(f"⚠️  Property enrichment failed for {doc_id}: {e}")
             # Add default values for property features
@@ -929,12 +986,20 @@ class UnifiedDataStreamLTRTrainer:
             return False  # Success threshold
     
     def _prepare_training_data(self, training_examples):
-        """Extract features, labels, and query IDs from training examples"""
+        """Extract features, labels, and query IDs from training examples. Ensure all features are present."""
         X = []
         y = []
         qids = []
         for example in training_examples:
-            feature_vector = [example['features'][fname] for fname in self.feature_names]
+            features = example['features']
+            missing_features = []
+            for fname in self.feature_names:
+                if fname not in features:
+                    features[fname] = 0.0
+                    missing_features.append(fname)
+            if missing_features:
+                print(f"[WARN] Missing features {missing_features} for qid={example.get('qid')} - filled with 0.0. Features sample: {str(dict(list(features.items())[:5]))}")
+            feature_vector = [features[fname] for fname in self.feature_names]
             X.append(feature_vector)
             y.append(example['relevance'])
             qids.append(example['qid'])
@@ -1045,9 +1110,9 @@ class UnifiedDataStreamLTRTrainer:
             X_train_modified = train_data['X'].copy()
             X_test_modified = test_data['X'].copy()
             
-            # Scale up position feature (multiply by 15) to make it more influential
+            # Scale up position feature (multiply by 20) to make it even more influential
             # Especially important for lower-ranked positions with clicks
-            position_multiplier = 15.0
+            position_multiplier = 20.0
             X_train_modified[:, position_feature_idx] *= position_multiplier
             X_test_modified[:, position_feature_idx] *= position_multiplier
             
@@ -1056,7 +1121,7 @@ class UnifiedDataStreamLTRTrainer:
             # Also identify and scale up position_engagement_signal for more influence
             try:
                 engagement_feature_idx = self.feature_names.index('position_engagement_signal')
-                engagement_multiplier = 1.0
+                engagement_multiplier = 15.0  # Significantly increased to boost lower-position engagements
                 X_train_modified[:, engagement_feature_idx] *= engagement_multiplier
                 X_test_modified[:, engagement_feature_idx] *= engagement_multiplier
                 print(f"✅ Amplified position_engagement_signal by {engagement_multiplier}x to increase its importance")
@@ -1071,6 +1136,36 @@ class UnifiedDataStreamLTRTrainer:
                     X_train_modified[:, feature_idx] *= interaction_multiplier
                     X_test_modified[:, feature_idx] *= interaction_multiplier
                     print(f"✅ Amplified {feature_name} by {interaction_multiplier}x to prioritize documents with user interactions")
+                except ValueError:
+                    print(f"ℹ️ {feature_name} feature not found, no additional scaling applied")
+            
+            # Strongly amplify property profile match scores
+            for feature_name in ['low_mode_match_score']:
+                try:
+                    feature_idx = self.feature_names.index(feature_name)
+                    profile_multiplier = 200.0  # Extreme amplification for LOW mode profile
+                    X_train_modified[:, feature_idx] *= profile_multiplier
+                    X_test_modified[:, feature_idx] *= profile_multiplier
+                    print(f"✅ Amplified {feature_name} by {profile_multiplier}x to strongly prioritize target property profiles")
+                except ValueError:
+                    print(f"ℹ️ {feature_name} feature not found, no additional scaling applied")
+            for feature_name in ['high_mode_match_score']:
+                try:
+                    feature_idx = self.feature_names.index(feature_name)
+                    profile_multiplier = 30.0  # Standard amplification for HIGH mode profile
+                    X_train_modified[:, feature_idx] *= profile_multiplier
+                    X_test_modified[:, feature_idx] *= profile_multiplier
+                    print(f"✅ Amplified {feature_name} by {profile_multiplier}x to strongly prioritize target property profiles")
+                except ValueError:
+                    print(f"ℹ️ {feature_name} feature not found, no additional scaling applied")
+            # Strongly amplify price competitiveness features for LOW mode
+            for feature_name in ['price_value_competitiveness', 'absolute_price_tier']:
+                try:
+                    feature_idx = self.feature_names.index(feature_name)
+                    price_multiplier = 100.0  # Very strong emphasis on price value
+                    X_train_modified[:, feature_idx] *= price_multiplier
+                    X_test_modified[:, feature_idx] *= price_multiplier
+                    print(f"✅ Amplified {feature_name} by {price_multiplier}x to strongly prioritize affordable properties")
                 except ValueError:
                     print(f"ℹ️ {feature_name} feature not found, no additional scaling applied")
             
@@ -1199,7 +1294,7 @@ class UnifiedDataStreamLTRTrainer:
             
             # Prepare feature importance visualization
             X_features = pd.DataFrame(test_data['X'], columns=self.feature_names)
-            position_idx = self.feature_names.index('position')
+            position_idx = self.feature_names.index('position');
             
             for i, group_size in enumerate(test_data['groups']):
                 end_idx = start_idx + group_size
@@ -1550,6 +1645,8 @@ class UnifiedDataStreamLTRTrainer:
                         group=groups_minimal,
                         verbose=False
                     )
+                    
+
                     
                     # Try import with simplified model
                     MLModel.import_ltr_model(
