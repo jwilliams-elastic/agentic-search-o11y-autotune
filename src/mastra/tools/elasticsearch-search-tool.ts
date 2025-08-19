@@ -38,8 +38,6 @@ const searchProperties = async (params: z.infer<typeof inputSchema>): Promise<z.
   // Use provided sessionId or generate one if not provided
   const sessionId = params.sessionId || `search_session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
   
-  // ...existing code...
-  
   // Get values from params or environment variables
   const elasticUrl = process.env.ELASTIC_URL;
   const elasticApiKey = process.env.ELASTIC_API_KEY;
@@ -60,24 +58,71 @@ const searchProperties = async (params: z.infer<typeof inputSchema>): Promise<z.
   });
   
   try {
-    // Build the template parameters based on provided inputs
-    const templateParams: Record<string, any> = {};
-    
-    // Add parameters to the template only if they are provided
+    // Build the filters array based on provided inputs
+    const filters: any[] = [];
     if (params.distance && params.latitude && params.longitude) {
-      templateParams.distance = params.distance;
-      // Convert string latitude and longitude to floats
-      templateParams.latitude = parseFloat(params.latitude);
-      templateParams.longitude = parseFloat(params.longitude);
+      filters.push({
+        geo_distance: {
+          distance: params.distance,
+          location: {
+            lat: parseFloat(params.latitude),
+            lon: parseFloat(params.longitude)
+          }
+        }
+      });
     }
-    
-    if (params.bedrooms) templateParams.bedrooms = params.bedrooms;
-    if (params.bathrooms) templateParams.bathrooms = params.bathrooms;
-    if (params.maintenance) templateParams.maintenance = params.maintenance;
-    if (params.square_footage) templateParams.square_footage = params.square_footage;
-    if (params.home_price) templateParams.home_price = params.home_price;
+    if (typeof params.bedrooms !== 'undefined') {
+      filters.push({
+        range: {
+          'number-of-bedrooms': { gte: params.bedrooms }
+        }
+      });
+    }
+    if (typeof params.bathrooms !== 'undefined') {
+      filters.push({
+        range: {
+          'number-of-bathrooms': { gte: params.bathrooms }
+        }
+      });
+    }
+    if (typeof params.maintenance !== 'undefined') {
+      filters.push({
+        range: {
+          'maintenance-fee': { lte: params.maintenance }
+        }
+      });
+    }
+    if (typeof params.square_footage !== 'undefined') {
+      filters.push({
+        range: {
+          'square-footage': { gte: params.square_footage }
+        }
+      });
+    }
+    if (typeof params.home_price !== 'undefined') {
+      filters.push({
+        range: {
+          'home-price': { lte: params.home_price }
+        }
+      });
+    }
+
+    // Build the template parameters
+    const templateParams: Record<string, any> = {};
     if (params.query) templateParams.query = params.query;
     if (params.features) templateParams.features = params.features;
+    // Properly stringify each filter object for the mustache template
+    if (filters.length > 0) {
+      // Simple approach - join the filter objects with commas manually
+      const filterStrings = filters.map(filter => JSON.stringify(filter));
+      templateParams.filtersJson = filterStrings.join(',');
+    }
+    // Remove any undefined/null values from templateParams
+    Object.keys(templateParams).forEach(key => {
+      if (templateParams[key] === undefined || templateParams[key] === null) {
+        delete templateParams[key];
+      }
+    });
   
 
     // Execute search using the search template

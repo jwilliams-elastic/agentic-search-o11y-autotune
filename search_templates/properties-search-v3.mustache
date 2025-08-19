@@ -19,57 +19,8 @@
           "filter": {
             "bool": {
               "must": [
-                {{#distance}}{
-                  "geo_distance": {
-                    "distance": "{{distance}}",
-                    "location": {
-                      "lat": {{latitude}},
-                      "lon": {{longitude}}
-                    }
-                  }
-                }{{/distance}}
-                {{#bedrooms}}{{#distance}},{{/distance}}{
-                  "range": {
-                    "number-of-bedrooms": {
-                      "gte": {{bedrooms}}
-                    }
-                  }
-                }{{/bedrooms}}
-                {{#bathrooms}}{{#distance}}{{^bedrooms}},{{/bedrooms}}{{/distance}}{{#bedrooms}},{{/bedrooms}}{
-                  "range": {
-                    "number-of-bathrooms": {
-                      "gte": {{bathrooms}}
-                    }
-                  }
-                }{{/bathrooms}}
-                {{#tax}},{
-                  "range": {
-                    "annual-tax": {
-                      "lte": {{tax}}
-                    }
-                  }
-                }{{/tax}}
-                {{#maintenance}},{
-                  "range": {
-                    "maintenance-fee": {
-                      "lte": {{maintenance}}
-                    }
-                  }
-                }{{/maintenance}}
-                {{#square_footage}},{
-                  "range": {
-                    "square-footage": {
-                      "gte": {{square_footage}}
-                    }
-                  }
-                }{{/square_footage}}
-                {{#home_price}},{
-                  "range": {
-                    "home-price": {
-                      "lte": {{home_price}}
-                    }
-                  }
-                }{{/home_price}}
+                {{#filtersJson}}{{{filtersJson}}}{{/filtersJson}}
+                {{^filtersJson}}{{/filtersJson}}
               ]
             }
           },
@@ -101,8 +52,7 @@
               },
               "weight": 0.3,
               "normalizer": "minmax"
-            }
-            {{#features}},
+            }{{#features}},
             {
               "retriever": {
                 "standard": {
@@ -116,8 +66,7 @@
               },
               "weight": 0.7,
               "normalizer": "minmax"
-            }
-            {{/features}}
+            }{{/features}}
           ]
         }
       }

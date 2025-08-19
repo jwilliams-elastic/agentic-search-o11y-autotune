@@ -149,6 +149,7 @@ class UnifiedDataStreamLTRTrainer:
         
         self.training_examples = []
         self.property_cache = {}  # Add a cache for property documents
+        self.property_exists_cache = {}  # Cache for property existence checks
     
     def has_enough_interactions(self, min_interactions: int = int(os.getenv('LTR_MIN_INTERACTIONS', 100))) -> bool:
         """Check if there are enough property_engagement events in the data stream (aligned with new schema)"""
@@ -653,9 +654,12 @@ class UnifiedDataStreamLTRTrainer:
         return results_lookup, query_metadata
     
     def _validate_document_id(self, doc_id):
-        """Validate that a document ID exists in the properties index"""
+        """Validate that a document ID exists in the properties index, with caching to avoid repeated ES calls"""
         try:
+            if doc_id in self.property_exists_cache:
+                return self.property_exists_cache[doc_id]
             exists = self.es_client.exists(index='properties', id=doc_id)
+            self.property_exists_cache[doc_id] = exists
             if not exists:
                 print(f"⚠️  Document ID {doc_id} from search results not found in properties index, skipping")
                 return False
@@ -667,10 +671,14 @@ class UnifiedDataStreamLTRTrainer:
     def extract_interaction_events(self):
         """Extract property_engagement events from unified data stream (aligned with new schema)"""
         print("📊 Extracting interaction events from unified data stream...")
-        return self._extract_events_by_action("property_engagement", 1000)
+        # Always use size=2000 for property_engagement events
+        return self._extract_events_by_action("property_engagement", size=2000)
     
     def _build_events_query(self, action_type, size=1000):
         """Build a query for extracting events by action type"""
+        # If the action_type is 'property_engagement', override size to 2000
+        if action_type == "property_engagement":
+            size = 2000
         return {
             "query": {
                 "bool": {
