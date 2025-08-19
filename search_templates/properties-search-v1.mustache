@@ -16,6 +16,14 @@
       "retriever": {
         "linear": {
           "rank_window_size": 100,
+          "filter": {
+            "bool": {
+              "must": [
+                {{#filtersJson}}{{{filtersJson}}}{{/filtersJson}}
+                {{^filtersJson}}{{/filtersJson}}
+              ]
+            }
+          },
           "retrievers": [
             {
               "retriever": {

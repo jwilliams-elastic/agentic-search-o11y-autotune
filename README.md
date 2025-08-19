@@ -230,3 +230,27 @@ These features are extracted and engineered from both search and engagement even
 - **Real-time Learning**: Continuous improvement from user behavior
 - **Zero Breaking Changes**: Seamless integration with existing search
 - **Production-Ready**: Enterprise-grade logging and error handling
+
+### Top 15 Features
+
+![Feature Importance](./models/feature_importance.png)
+
+Here is a concise business logic summary for the top 15 features in the LTR model:
+
+1. **position_log**: Strongly rewards higher-ranked (top) search results, with diminishing returns for lower positions.
+2. **position_bias_factor**: Adjusts for user bias toward top results, giving more weight to higher positions.
+3. **position_engagement_signal**: Captures user engagement (e.g., clicks) at specific positions, boosting results that get attention even at lower ranks.
+4. **click_count**: Directly measures how many times a property was clicked, indicating user interest.
+5. **position**: The absolute rank of the result; lower values (top results) are favored.
+6. **query_length**: Reflects the complexity or specificity of the user's query; longer queries may indicate more intent.
+7. **session_avg_position**: Average position of results viewed in a session, capturing user browsing patterns.
+8. **user_engagement_score**: Aggregates various engagement signals (clicks, interactions) into a single score.
+9. **view_count**: Counts how many times a property was viewed, showing general interest.
+10. **elasticsearch_score**: The original ES relevance score, representing text-based matching.
+11. **same_neighborhood**: Indicates if the property is in the same neighborhood as the user's query or filter, boosting local relevance.
+12. **time_in_session_ms**: Measures how long the user spent in the session, which can correlate with engagement or satisfaction.
+13. **position_reciprocal**: Another way to emphasize top results, giving a higher score to higher-ranked properties.
+14. **bm25_title_score**: Measures how well the property title matches the query using BM25 relevance.
+15. **search_time_ms**: The time taken to perform the search; can be a proxy for query complexity or backend performance.
+
+These features combine user behavior, search ranking, query complexity, and property relevance to optimize which properties are shown at the top of search results.
