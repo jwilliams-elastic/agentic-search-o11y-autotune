@@ -684,7 +684,7 @@ class UnifiedDataStreamLTRTrainer:
                 "bool": {
                     "filter": [
                         {"term": {"custom.event.action": action_type}},
-                        {"range": {"@timestamp": {"gte": "now-7d"}}}
+                        {"range": {"@timestamp": {"gte": "now-1h"}}}
                     ]
                 }
             },
@@ -1118,59 +1118,35 @@ class UnifiedDataStreamLTRTrainer:
             X_train_modified = train_data['X'].copy()
             X_test_modified = test_data['X'].copy()
             
-            # Scale up position feature (multiply by 20) to make it even more influential
-            # Especially important for lower-ranked positions with clicks
-            position_multiplier = 20.0
+            # Scale up position feature (multiply by 40) to make it even more influential
+            position_multiplier = 40.0  # Increased from 20.0
             X_train_modified[:, position_feature_idx] *= position_multiplier
             X_test_modified[:, position_feature_idx] *= position_multiplier
-            
             print(f"✅ Amplified position feature by {position_multiplier}x to increase its importance")
-            
             # Also identify and scale up position_engagement_signal for more influence
             try:
                 engagement_feature_idx = self.feature_names.index('position_engagement_signal')
-                engagement_multiplier = 15.0  # Significantly increased to boost lower-position engagements
+                engagement_multiplier = 30.0  # Increased from 15.0
                 X_train_modified[:, engagement_feature_idx] *= engagement_multiplier
                 X_test_modified[:, engagement_feature_idx] *= engagement_multiplier
                 print(f"✅ Amplified position_engagement_signal by {engagement_multiplier}x to increase its importance")
             except ValueError:
                 print("ℹ️ position_engagement_signal feature not found, no additional scaling applied")
-            
             # Amplify user engagement and interaction features to prioritize documents with interactions
             for feature_name in ['user_engagement_score', 'interaction_rate', 'click_count', 'conversational_detection']:
                 try:
                     feature_idx = self.feature_names.index(feature_name)
-                    interaction_multiplier = 10.0  # Increased from 5.0 to 10.0 for stronger emphasis
+                    interaction_multiplier = 20.0  # Increased from 10.0
                     X_train_modified[:, feature_idx] *= interaction_multiplier
                     X_test_modified[:, feature_idx] *= interaction_multiplier
                     print(f"✅ Amplified {feature_name} by {interaction_multiplier}x to prioritize documents with user interactions")
-                except ValueError:
-                    print(f"ℹ️ {feature_name} feature not found, no additional scaling applied")
-            
-            # Strongly amplify property profile match scores
-            for feature_name in ['low_mode_match_score']:
-                try:
-                    feature_idx = self.feature_names.index(feature_name)
-                    profile_multiplier = 200.0  # Extreme amplification for LOW mode profile
-                    X_train_modified[:, feature_idx] *= profile_multiplier
-                    X_test_modified[:, feature_idx] *= profile_multiplier
-                    print(f"✅ Amplified {feature_name} by {profile_multiplier}x to strongly prioritize target property profiles")
-                except ValueError:
-                    print(f"ℹ️ {feature_name} feature not found, no additional scaling applied")
-            for feature_name in ['high_mode_match_score']:
-                try:
-                    feature_idx = self.feature_names.index(feature_name)
-                    profile_multiplier = 30.0  # Standard amplification for HIGH mode profile
-                    X_train_modified[:, feature_idx] *= profile_multiplier
-                    X_test_modified[:, feature_idx] *= profile_multiplier
-                    print(f"✅ Amplified {feature_name} by {profile_multiplier}x to strongly prioritize target property profiles")
                 except ValueError:
                     print(f"ℹ️ {feature_name} feature not found, no additional scaling applied")
             # Strongly amplify price competitiveness features for LOW mode
             for feature_name in ['price_value_competitiveness', 'absolute_price_tier']:
                 try:
                     feature_idx = self.feature_names.index(feature_name)
-                    price_multiplier = 100.0  # Very strong emphasis on price value
+                    price_multiplier = 200.0  # Increased from 100.0
                     X_train_modified[:, feature_idx] *= price_multiplier
                     X_test_modified[:, feature_idx] *= price_multiplier
                     print(f"✅ Amplified {feature_name} by {price_multiplier}x to strongly prioritize affordable properties")
@@ -1533,23 +1509,6 @@ class UnifiedDataStreamLTRTrainer:
                             ],
                             "boost_mode": "multiply",
                             "score_mode": "sum"
-                        }}
-                    )
-                elif 'conversational_detection' in feature_name:
-                    # Conversational detection features - simplified script for better Elasticsearch compatibility
-                    extractor = QueryFeatureExtractor(
-                        feature_name=feature_name,
-                        query={"function_score": {
-                            "query": {"match_all": {}},
-                            "functions": [
-                                {"field_value_factor": {
-                                    "field": "home-price",  # Use a numeric field as proxy
-                                    "factor": 0.001,
-                                    "modifier": "log1p",
-                                    "missing": 1
-                                }}
-                            ],
-                            "boost_mode": "replace"
                         }}
                     )
                 elif 'position_engagement_signal' in feature_name:

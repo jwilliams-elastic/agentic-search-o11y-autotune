@@ -59,51 +59,72 @@ const workflowOutputSchema = z.object({
 function generateRandomSearchParams(session: number, searchNum: number, searchBiasPercent: number = 80, propertyProfile: 'LOW' | 'HIGH' = 'LOW', v3TemplatePercent: number = 80) {
  // Bias: configurable percentage of searches will use the preferred values, rest random
  let bedrooms, bathrooms, maintenance, state;
- 
- if (propertyProfile === 'LOW') {
-  // LOW profile: 3 bed, 2 bath, affordable homes
+ const edgeCaseChance = 0.12; // 12% of the time, generate an edge case
+
+ // Fix: ensure propertyProfile is a string (not a type)
+ const profile = String(propertyProfile);
+
+ if (profile === 'LOW') {
   if (Math.random() < (searchBiasPercent / 100)) {
-   // Our primary target properties
+   // Strong bias: 3 bed, 2 bath, low price
    bedrooms = 3;
    bathrooms = 2;
+  } else if (Math.random() < edgeCaseChance) {
+   // Edge cases: 1.5 baths, 4 beds, or very low/high price
+   bedrooms = [2, 3, 4][Math.floor(Math.random() * 3)];
+   bathrooms = [1.5, 2, 2.5, 3][Math.floor(Math.random() * 4)];
   } else {
-   bedrooms = Math.floor(Math.random() * 3) + 2; // 2, 3, or 4 bedrooms, uniform random
-   bathrooms = Math.floor(Math.random() * 3) * 0.5 + 1.5; // 1.5, 2.0, or 2.5 bathrooms, uniform random
+   // More variety, but still in the affordable range
+   bedrooms = Math.floor(Math.random() * 3) + 2; // 2, 3, or 4
+   bathrooms = Math.floor(Math.random() * 3) * 0.5 + 1.5; // 1.5, 2.0, 2.5
   }
  } else {
-  // HIGH profile: 5+ bed, 4+ bath, luxury homes
   if (Math.random() < (searchBiasPercent / 100)) {
-   // Luxury target properties
-   bedrooms = 5 + Math.floor(Math.random() * 3); // 5-7 bedrooms
-   bathrooms = 4 + Math.floor(Math.random() * 3); // 4-6 bathrooms
+   // Strong bias: 5+ bed, 4+ bath, high price
+   bedrooms = 5 + Math.floor(Math.random() * 3); // 5-7
+   bathrooms = 4 + Math.floor(Math.random() * 3); // 4-6
+  } else if (Math.random() < edgeCaseChance) {
+   // Edge cases: 8 beds, 7 baths, or very high/low price
+   bedrooms = [3, 4, 5, 6, 7, 8][Math.floor(Math.random() * 6)];
+   bathrooms = [2, 3, 4, 5, 6, 7][Math.floor(Math.random() * 6)];
   } else {
-   // Even in random cases, still bias toward luxury properties
-   bedrooms = Math.floor(Math.random() * 3) + 2; // 2, 3, or 4 bedrooms, uniform random
-   bathrooms = Math.floor(Math.random() * 3) * 0.5 + 1.5; // 1.5, 2.0, or 2.5 bathrooms, uniform random
+   // More variety, but still in the luxury range
+   bedrooms = Math.floor(Math.random() * 3) + 4; // 4, 5, 6
+   bathrooms = Math.floor(Math.random() * 3) + 3; // 3, 4, 5
   }
  }
 
- // Set price range based on property profile
- const priceRangeSelector = Math.random();
+ // Set price range based on property profile, with some outliers
  let homePrice;
- 
  if (propertyProfile === 'LOW') {
-  // LOW profile: $200k-$400k range, always <= 400k
-  homePrice = Math.floor(Math.random() * 200000) + 200000;
-  if (homePrice > 400000) homePrice = 400000;
+  if (Math.random() < edgeCaseChance) {
+   homePrice = [150000, 550000, 600000][Math.floor(Math.random() * 3)];
+  } else {
+   homePrice = Math.floor(Math.random() * 250000) + 200000; // $200k-$450k
+   if (homePrice > 500000) homePrice = 500000;
+  }
  } else {
-  // HIGH profile: $1M-$10M range
-  homePrice = Math.floor(Math.random() * 9000000) + 1000000;
+  if (Math.random() < edgeCaseChance) {
+   homePrice = [700000, 12000000][Math.floor(Math.random() * 2)];
+  } else {
+   homePrice = Math.floor(Math.random() * 9000000) + 1000000; // $1M-$10M
+  }
  }
- 
- // Square footage based on property profile
+
+ // Square footage based on property profile, with some outliers
  let squareFootage;
  if (propertyProfile === 'LOW') {
-  // Standard homes: 500-5000 sq ft
-  squareFootage = Math.floor(Math.random() * 4500) + 500;
+  if (Math.random() < edgeCaseChance) {
+   squareFootage = [800, 5200][Math.floor(Math.random() * 2)];
+  } else {
+   squareFootage = Math.floor(Math.random() * 4500) + 500;
+  }
  } else {
-  // Luxury homes: 3000-15000 sq ft
-  squareFootage = Math.floor(Math.random() * 12000) + 3000;
+  if (Math.random() < edgeCaseChance) {
+   squareFootage = [2500, 16000][Math.floor(Math.random() * 2)];
+  } else {
+   squareFootage = Math.floor(Math.random() * 12000) + 3000;
+  }
  }
 
  // A set of common search queries based on property profile
@@ -249,9 +270,8 @@ function generateRandomSearchParams(session: number, searchNum: number, searchBi
  if (state) {
   params.state = state;
  }
-
- // Enforce home_price filter for LOW profile
- if (propertyProfile === 'LOW') {
+ // Use profile for further checks
+ if (profile === 'LOW') {
   params.home_price = Math.min(params.home_price, 500000);
  }
 
@@ -266,13 +286,13 @@ function generateRandomSearchParams(session: number, searchNum: number, searchBi
  return params;
 }
 
-// Step to train and deploy the model using pythonTool (for workflow chaining)
-const trainAndDeployModelStep = createStep({
- id: 'train-and-deploy-learn-to-rank-model',
+// Step to train the model using pythonTool
+const trainModelStep = createStep({
+ id: 'train-learn-to-rank-model',
  inputSchema: workflowOutputSchema,
  outputSchema: z.object({
   searchSimResult: workflowOutputSchema,
-  trainDeployResult: z.object({
+  trainResult: z.object({
    success: z.boolean(),
    message: z.string(),
    details: z.any().optional(),
@@ -281,15 +301,58 @@ const trainAndDeployModelStep = createStep({
  execute: async ({ inputData, runtimeContext }) => {
   const result = await pythonTool.execute({
    context: {
-    scriptCommand: 'train-and-deploy-model',
+    scriptCommand: 'train-model',
    },
    runtimeContext
   });
   return {
    searchSimResult: inputData,
-   trainDeployResult: {
+   trainResult: {
     success: result.success ?? true,
-    message: result.message ?? 'Model training and deployment completed',
+    message: result.message ?? 'Model training completed',
+    details: result.details,
+   }
+  };
+ },
+});
+
+// Step to deploy the model using pythonTool
+const deployModelStep = createStep({
+ id: 'deploy-learn-to-rank-model',
+ inputSchema: z.object({
+  searchSimResult: workflowOutputSchema,
+  trainResult: z.object({
+   success: z.boolean(),
+   message: z.string(),
+   details: z.any().optional(),
+  })
+ }),
+ outputSchema: z.object({
+  searchSimResult: workflowOutputSchema,
+  trainResult: z.object({
+   success: z.boolean(),
+   message: z.string(),
+   details: z.any().optional(),
+  }),
+  deployResult: z.object({
+   success: z.boolean(),
+   message: z.string(),
+   details: z.any().optional(),
+  })
+ }),
+ execute: async ({ inputData, runtimeContext }) => {
+  const result = await pythonTool.execute({
+   context: {
+    scriptCommand: 'deploy-model',
+   },
+   runtimeContext
+  });
+  return {
+   searchSimResult: inputData.searchSimResult,
+   trainResult: inputData.trainResult,
+   deployResult: {
+    success: result.success ?? true,
+    message: result.message ?? 'Model deployment completed',
     details: result.details,
    }
   };
@@ -385,22 +448,17 @@ const simulateSearchAutotuneStep = createStep({
    
     // Process engagements for this session if we have results
    if (sessionResults.length > 0) {
-    // Engagement candidates: use all session results, no maintenance or state=FL bias
     let engagementCandidates = sessionResults;
-    // For LOW profile, filter out high-priced properties before sorting
     if (inputData.propertyProfile === 'LOW') {
       engagementCandidates = sessionResults.filter(r => (typeof r.home_price === 'number' ? r.home_price <= 500000 : false));
       engagementCandidates = engagementCandidates.sort((a, b) => (a.home_price ?? Infinity) - (b.home_price ?? Infinity));
-      // If no candidates remain after filtering, fall back to all sessionResults sorted by price
       if (engagementCandidates.length === 0) {
         engagementCandidates = [...sessionResults].sort((a, b) => (a.home_price ?? Infinity) - (b.home_price ?? Infinity));
       }
     }
-    // For HIGH profile, filter out low-priced properties before sorting
     if (inputData.propertyProfile === 'HIGH') {
       engagementCandidates = sessionResults.filter(r => (typeof r.home_price === 'number' ? r.home_price >= 1000000 : false));
       engagementCandidates = engagementCandidates.sort((a, b) => (b.home_price ?? -Infinity) - (a.home_price ?? -Infinity));
-      // If no candidates remain after filtering, fall back to all sessionResults sorted by price
       if (engagementCandidates.length === 0) {
         engagementCandidates = [...sessionResults].sort((a, b) => (b.home_price ?? -Infinity) - (a.home_price ?? -Infinity));
       }
@@ -408,8 +466,13 @@ const simulateSearchAutotuneStep = createStep({
     // Calculate how many engagements to simulate based on the engagement rate
     const numEngagements = Math.ceil((engagementCandidates.length * inputData.engagementRate) / 100);
     for (let i = 0; i < numEngagements; i++) {
-     // Pick the candidate in order (no bias, or lowest price for LOW profile)
-     let result = engagementCandidates[Math.min(i, engagementCandidates.length - 1)];
+     let result;
+     if (Math.random() < 0.15) {
+       // 15% of the time, pick a random property for engagement
+       result = engagementCandidates[Math.floor(Math.random() * engagementCandidates.length)];
+     } else {
+       result = engagementCandidates[Math.min(i, engagementCandidates.length - 1)];
+     }
      // Generate a realistic engagement message based on property profile
      let engagementMessages;
      
@@ -524,7 +587,12 @@ const searchAutotuneWorkflow = createWorkflow({
  outputSchema: z.object({
   message: z.string(),
   searchSimResult: workflowOutputSchema,
-  trainDeployResult: z.object({
+  trainResult: z.object({
+   success: z.boolean(),
+   message: z.string(),
+   details: z.any().optional(),
+  }),
+  deployResult: z.object({
    success: z.boolean(),
    message: z.string(),
    details: z.any().optional(),
@@ -532,12 +600,18 @@ const searchAutotuneWorkflow = createWorkflow({
  }),
 })
  .then(simulateSearchAutotuneStep)
- .then(trainAndDeployModelStep)
+ .then(trainModelStep)
+ .then(deployModelStep)
  .then(createStep({
   id: 'completion-step',
   inputSchema: z.object({
    searchSimResult: workflowOutputSchema,
-   trainDeployResult: z.object({
+   trainResult: z.object({
+    success: z.boolean(),
+    message: z.string(),
+    details: z.any().optional(),
+   }),
+   deployResult: z.object({
     success: z.boolean(),
     message: z.string(),
     details: z.any().optional(),
@@ -547,7 +621,12 @@ const searchAutotuneWorkflow = createWorkflow({
    success: z.boolean(),
    message: z.string(),
    searchSimResult: workflowOutputSchema,
-   trainDeployResult: z.object({
+   trainResult: z.object({
+    success: z.boolean(),
+    message: z.string(),
+    details: z.any().optional(),
+   }),
+   deployResult: z.object({
     success: z.boolean(),
     message: z.string(),
     details: z.any().optional(),
@@ -557,12 +636,12 @@ const searchAutotuneWorkflow = createWorkflow({
    // Surface Python stdout/stderr if available
    let pythonStdout = '';
    let pythonStderr = '';
-   if (inputData.trainDeployResult?.details) {
-    if (Array.isArray(inputData.trainDeployResult.details.stdout)) {
-     pythonStdout = inputData.trainDeployResult.details.stdout.filter(Boolean).join('\n');
+   if (inputData.deployResult?.details) {
+    if (Array.isArray(inputData.deployResult.details.stdout)) {
+     pythonStdout = inputData.deployResult.details.stdout.filter(Boolean).join('\n');
     }
-    if (Array.isArray(inputData.trainDeployResult.details.stderr)) {
-     pythonStderr = inputData.trainDeployResult.details.stderr.filter(Boolean).join('\n');
+    if (Array.isArray(inputData.deployResult.details.stderr)) {
+     pythonStderr = inputData.deployResult.details.stderr.filter(Boolean).join('\n');
     }
    }
    let message = 'Search autotune workflow completed successfully.';
@@ -572,10 +651,11 @@ const searchAutotuneWorkflow = createWorkflow({
     if (pythonStderr) message += `\nSTDERR:\n${pythonStderr}`;
    }
    return {
-    success: Boolean(inputData.searchSimResult?.success) && Boolean(inputData.trainDeployResult?.success),
+    success: Boolean(inputData.searchSimResult?.success) && Boolean(inputData.trainResult?.success) && Boolean(inputData.deployResult?.success),
     message,
     searchSimResult: inputData.searchSimResult,
-    trainDeployResult: inputData.trainDeployResult
+    trainResult: inputData.trainResult,
+    deployResult: inputData.deployResult
    };
   }
  }))
