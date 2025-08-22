@@ -299,20 +299,27 @@ const trainModelStep = createStep({
   })
  }),
  execute: async ({ inputData, runtimeContext }) => {
-  const result = await pythonTool.execute({
-   context: {
-    scriptCommand: 'train-model',
-   },
-   runtimeContext
-  });
-  return {
-   searchSimResult: inputData,
-   trainResult: {
-    success: result.success ?? true,
-    message: result.message ?? 'Model training completed',
-    details: result.details,
+  try {
+   const result = await pythonTool.execute({
+    context: {
+     scriptCommand: 'train-model',
+    },
+    runtimeContext
+   });
+   if (!result.success) {
+    throw new Error(result.message || 'Model training failed');
    }
-  };
+   return {
+    searchSimResult: inputData,
+    trainResult: {
+     success: result.success ?? true,
+     message: result.message ?? 'Model training completed',
+     details: result.details,
+    }
+   };
+  } catch (err) {
+   throw err;
+  }
  },
 });
 
@@ -341,21 +348,28 @@ const deployModelStep = createStep({
   })
  }),
  execute: async ({ inputData, runtimeContext }) => {
-  const result = await pythonTool.execute({
-   context: {
-    scriptCommand: 'deploy-model',
-   },
-   runtimeContext
-  });
-  return {
-   searchSimResult: inputData.searchSimResult,
-   trainResult: inputData.trainResult,
-   deployResult: {
-    success: result.success ?? true,
-    message: result.message ?? 'Model deployment completed',
-    details: result.details,
+  try {
+   const result = await pythonTool.execute({
+    context: {
+     scriptCommand: 'deploy-model',
+    },
+    runtimeContext
+   });
+   if (!result.success) {
+    throw new Error(result.message || 'Model deployment failed');
    }
-  };
+   return {
+    searchSimResult: inputData.searchSimResult,
+    trainResult: inputData.trainResult,
+    deployResult: {
+     success: result.success ?? true,
+     message: result.message ?? 'Model deployment completed',
+     details: result.details,
+    }
+   };
+  } catch (err) {
+   throw err;
+  }
  },
 });
 
@@ -365,217 +379,239 @@ const simulateSearchAutotuneStep = createStep({
  inputSchema: workflowInputSchema,
  outputSchema: workflowOutputSchema,
  execute: async ({ inputData, runtimeContext }) => {
-  const startTime = Date.now();
-  const stats = {
-   totalSearches: 0,
-   totalEngagements: 0,
-   // ...existing code...
-   sessionsCompleted: 0,
-   elapsedTimeMs: 0
-  };
-  
-  // Process each user session
-  for (let sessionNum = 1; sessionNum <= inputData.numSessions; sessionNum++) {
-   const userId = `${inputData.userIdPrefix}_${sessionNum}`;
-   const sessionId = `sim_session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
-   console.log(`Simulating session ${sessionNum}/${inputData.numSessions} for user ${userId}`);
-
-   // Track session results for engagements, now with property attributes for biasing
-   type SessionResult = {
-    id: string;
-    title: string;
-    position: number;
-    maintenance?: number;
-    bedrooms?: number;
-    bathrooms?: number;
-    state?: string;
-    home_price?: number;
-    annual_tax?: number;
+  try {
+   const startTime = Date.now();
+   const stats = {
+    totalSearches: 0,
+    totalEngagements: 0,
+    // ...existing code...
+    sessionsCompleted: 0,
+    elapsedTimeMs: 0
    };
-   const sessionResults: Array<SessionResult> = [];
    
-   // Execute searches for this session
-   for (let searchNum = 1; searchNum <= inputData.searchesPerSession; searchNum++) {
-    // Generate random search parameters
-    const searchParams = generateRandomSearchParams(
-     sessionNum,
-     searchNum,
-     typeof inputData.searchBiasPercent === 'number' ? inputData.searchBiasPercent : 80,
-     inputData.propertyProfile,
-     typeof inputData.v3TemplatePercent === 'number' ? inputData.v3TemplatePercent : 80
-    );
-    
-    // Set up the search tool input
-    const searchToolInput = {
-     userId,
-     sessionId,
-     ...searchParams,
-     logInteractions: true
+   // Process each user session
+   for (let sessionNum = 1; sessionNum <= inputData.numSessions; sessionNum++) {
+    const userId = `${inputData.userIdPrefix}_${sessionNum}`;
+    const sessionId = `sim_session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    console.log(`Simulating session ${sessionNum}/${inputData.numSessions} for user ${userId}`);
+
+    // Track session results for engagements, now with property attributes for biasing
+    type SessionResult = {
+     id: string;
+     title: string;
+     position: number;
+     maintenance?: number;
+     bedrooms?: number;
+     bathrooms?: number;
+     state?: string;
+     home_price?: number;
+     annual_tax?: number;
     };
+    const sessionResults: Array<SessionResult> = [];
     
-    // Execute the search
-    const searchResult = await elasticsearchSearchTool.execute({ 
-     context: searchToolInput, 
-     runtimeContext 
-    });
-    
-    stats.totalSearches++;
-    
-    // Store the search results for potential engagement
-    if (searchResult.success && searchResult.results && searchResult.results.length > 0) {
-     searchResult.results.forEach(result => {
-      sessionResults.push({
-       id: result.id,
-       title: result.property_title || result.address || `Property ${result.id}`,
-       position: result.position,
-       // Add property attributes for engagement bias
-       maintenance: result.maintenance,
-       bedrooms: result.bedrooms,
-       bathrooms: result.bathrooms,
-       state: result.state,
-       home_price: result.home_price,
-       annual_tax: result.annual_tax
-      });
-     });
-    }
-    
-    // Add a small delay between searches to avoid overwhelming the system
-    if (inputData.maxSearchDelay > 0) {
-     await new Promise(resolve => setTimeout(resolve, Math.random() * inputData.maxSearchDelay));
-    }
-   }
-   
-    // Process engagements for this session if we have results
-   if (sessionResults.length > 0) {
-    let engagementCandidates = sessionResults;
-    if (inputData.propertyProfile === 'LOW') {
-      engagementCandidates = sessionResults.filter(r => (typeof r.home_price === 'number' ? r.home_price <= 500000 : false));
-      engagementCandidates = engagementCandidates.sort((a, b) => (a.home_price ?? Infinity) - (b.home_price ?? Infinity));
-      if (engagementCandidates.length === 0) {
-        engagementCandidates = [...sessionResults].sort((a, b) => (a.home_price ?? Infinity) - (b.home_price ?? Infinity));
-      }
-    }
-    if (inputData.propertyProfile === 'HIGH') {
-      engagementCandidates = sessionResults.filter(r => (typeof r.home_price === 'number' ? r.home_price >= 1000000 : false));
-      engagementCandidates = engagementCandidates.sort((a, b) => (b.home_price ?? -Infinity) - (a.home_price ?? -Infinity));
-      if (engagementCandidates.length === 0) {
-        engagementCandidates = [...sessionResults].sort((a, b) => (b.home_price ?? -Infinity) - (a.home_price ?? -Infinity));
-      }
-    }
-    // Calculate how many engagements to simulate based on the engagement rate
-    const numEngagements = Math.ceil((engagementCandidates.length * inputData.engagementRate) / 100);
-    for (let i = 0; i < numEngagements; i++) {
-     let result;
-     if (Math.random() < 0.15) {
-       // 15% of the time, pick a random property for engagement
-       result = engagementCandidates[Math.floor(Math.random() * engagementCandidates.length)];
-     } else {
-       result = engagementCandidates[Math.min(i, engagementCandidates.length - 1)];
-     }
-     // Generate a realistic engagement message based on property profile
-     let engagementMessages;
+    // Execute searches for this session
+    for (let searchNum = 1; searchNum <= inputData.searchesPerSession; searchNum++) {
+     // Generate random search parameters
+     const searchParams = generateRandomSearchParams(
+      sessionNum,
+      searchNum,
+      typeof inputData.searchBiasPercent === 'number' ? inputData.searchBiasPercent : 80,
+      inputData.propertyProfile,
+      typeof inputData.v3TemplatePercent === 'number' ? inputData.v3TemplatePercent : 80
+     );
      
-     if (inputData.propertyProfile === 'LOW') {
-      engagementMessages = [
-       `I'm interested in viewing this 3 bed 2 bath property ${result.id} under 400k`,
-       `Can I schedule a viewing for this affordable ${result.title} in ? Love the 3/2 layout`,
-       `What are the HOA fees for this 3 bedroom property ${result.id}? I'm looking for homes under 350k`,
-       `Is this 3 bedroom home in still available? I'm not interested in South Carolina properties`,
-       `I'd like more information about this 3/2 in under 400k`,
-       `Are there any similar 3 bed 2 bath properties near ${result.title} in , not South Carolina?`,
-       `Can you tell me more about the schools near this 3 bedroom home? I'm avoiding South Carolina`,
-       `What's the square footage of this 3/2 property in ? I'm looking in the 200k-350k range`,
-       `Has the price for this 3 bedroom 2 bath home changed recently? My budget is 350k max`,
-       `I'd like to make an offer on this 3/2 property, not interested in South Carolina homes`,
-       `Does this 3 bedroom home have hurricane shutters?`,
-       `What are the property taxes on this 3/2 home in ? Looking for something affordable`,
-       `How old is the AC unit in this 3 bedroom? I want a home, not South Carolina`,
-       `Is this 3 bed 2 bath home in a flood zone? I'm specifically looking in `,
-       `Are there any pending special assessments on this 3/2 property? My max budget is 400k`
-      ];
-     } else {
-      // HIGH profile: Luxury 5+ bed, 4+ bath homes
-      engagementMessages = [
-       `I'm interested in scheduling a private tour of this luxury ${result.title}`,
-       `What amenities are included with this ${(result.bedrooms ?? 5)}+ bedroom estate? Looking for a premium property`,
-       `Is this luxury waterfront property still available? My budget is up to $8 million`,
-       `Does this estate come with staff quarters? I need at least 5 bedrooms for the main residence`,
-       `I'd like more details about the security features of this luxury ${result.title}`,
-       `Are there any other premium properties comparable to ${result.title} in this area?`,
-       `What are the property taxes on this luxury estate? Looking at properties $2-5 million`,
-       `Does this property have a wine cellar and home theater? I need at least 6 bedrooms`,
-       `Is the helipad on this estate FAA approved? I need a luxury property with easy access`,
-       `What's the square footage of the master suite in this luxury home? I require at least 5 bedrooms total`,
-       `I'd like to make an offer on this luxury property. Does it come fully furnished?`,
-       `Does this estate have separate guest accommodations? I'm looking for a primary residence with 5+ bedrooms`,
-       `What's the history of this architectural masterpiece? I collect luxury properties`,
-       `Are there any conservation easements on this estate? I'm looking for privacy and exclusivity`,
-       `How many cars does the garage accommodate? I need space for my collection in a luxury residence`
-      ];
-     }
-
-     const messageIndex = Math.floor(Math.random() * engagementMessages.length);
-
-     // Set up the engagement tool input, including query context for schema alignment
-     // Use the same template used for search (v2 or v3) - never use v4 for training data
-     const engagementToolInput = {
+     // Set up the search tool input
+     const searchToolInput = {
       userId,
       sessionId,
-      userMessage: engagementMessages[messageIndex],
-      position: result.position,
-      documentId: result.id,
-      lastSearchResults: sessionResults,
-      // Provide query context for logging schema
-      queryText: result.title, // Use property title as query.text for engagement
-      queryTemplateId: 'properties-search-v3', // Always use v3 for training data
-      queryResultCount: sessionResults.length
+      ...searchParams,
+      logInteractions: true
      };
-
-     // Log engagement for observability with detailed information about property attributes
-     console.log(`Engagement: User ${userId}, Document ${result.id}, Position ${result.position}, Template: ${engagementToolInput.queryTemplateId}, Profile: ${inputData.propertyProfile}, State: ${result.state}, Bedrooms: ${result.bedrooms}, Bathrooms: ${result.bathrooms}, Price: ${result.home_price}`);
-
-     // For v4 template, add extra logging to help diagnose issues
-     if (engagementToolInput.queryTemplateId === 'properties-search-v4') {
-      if (inputData.propertyProfile === 'LOW') {
-       console.log(`V4 TEMPLATE ENGAGEMENT: Strongly reinforcing 3 bed, 2 bath home preference for document ${result.id}`);
+     
+     // Execute the search
+     const searchResult = await elasticsearchSearchTool.execute({ 
+      context: searchToolInput, 
+      runtimeContext 
+     });
+     if (!searchResult.success) {
+      throw new Error(searchResult.message || 'Search tool failed');
+     }
+     
+     stats.totalSearches++;
+     
+     // Ensure that the search results are correctly mapped to include home_price and other attributes
+     if (searchResult.success && searchResult.results && searchResult.results.length > 0) {
+       searchResult.results.forEach(result => {
+         console.debug(`[DEBUG] Result object structure:`, result); // Log the entire result object for debugging
+         sessionResults.push({
+           id: result.id,
+           title: result.property_title || result.address || `Property ${result.id}`,
+           position: result.position,
+           maintenance: result.maintenance,
+           bedrooms: result.bedrooms || result['number-of-bedrooms']?.[0], // Extract bedrooms
+           bathrooms: result.bathrooms || result['number-of-bathrooms']?.[0], // Extract bathrooms
+           state: result.state,
+           home_price: result.home_price || result['home-price']?.[0], // Correctly extract home_price
+           annual_tax: result.annual_tax
+         });
+       });
+     }
+     
+     // Add a small delay between searches to avoid overwhelming the system
+     if (inputData.maxSearchDelay > 0) {
+      await new Promise(resolve => setTimeout(resolve, Math.random() * inputData.maxSearchDelay));
+     }
+    }
+    
+    // Process engagements for this session if we have results
+    if (sessionResults.length > 0) {
+     let engagementCandidates = sessionResults;
+     if (inputData.propertyProfile === 'LOW') {
+       engagementCandidates = sessionResults.filter(r => {
+         return (
+           typeof r.bedrooms === 'number' && r.bedrooms === 3 &&
+           typeof r.bathrooms === 'number' && r.bathrooms === 2 &&
+           typeof r.home_price === 'number' && r.home_price <= 500000
+         );
+       });
+       if (engagementCandidates.length === 0) {
+         console.warn(`[WARNING] No valid engagement candidates found for LOW profile. Check data integrity.`);
+       }
+     } else if (inputData.propertyProfile === 'HIGH') {
+       engagementCandidates = sessionResults.filter(r => {
+         return (
+           typeof r.bedrooms === 'number' && r.bedrooms >= 5 &&
+           typeof r.bathrooms === 'number' && r.bathrooms >= 4 &&
+           typeof r.home_price === 'number' && r.home_price >= 1000000
+         );
+       });
+       if (engagementCandidates.length === 0) {
+         console.warn(`[WARNING] No valid engagement candidates found for HIGH profile. Check data integrity.`);
+       }
+     }
+     // If strict separation and no valid candidates for HIGH, skip engagement generation for this session
+     if (inputData.propertyProfile === 'HIGH' && engagementCandidates.length === 0) {
+       // No valid candidates for HIGH profile, skip engagement generation for this session
+       stats.sessionsCompleted++;
+       continue;
+     }
+     // Calculate how many engagements to simulate based on the engagement rate
+     const numEngagements = Math.ceil((engagementCandidates.length * inputData.engagementRate) / 100);
+     for (let i = 0; i < numEngagements; i++) {
+      let result;
+      if (Math.random() < 0.15) {
+        // 15% of the time, pick a random property for engagement
+        result = engagementCandidates[Math.floor(Math.random() * engagementCandidates.length)];
       } else {
-       console.log(`V4 TEMPLATE ENGAGEMENT: Strongly reinforcing 5+ bed, 4+ bath luxury home preference for document ${result.id}`);
+        result = engagementCandidates[Math.min(i, engagementCandidates.length - 1)];
+      }
+      // Generate a realistic engagement message based on property profile
+      let engagementMessages;
+      
+      if (inputData.propertyProfile === 'LOW') {
+       engagementMessages = [
+        `I'm interested in viewing this 3 bed 2 bath property ${result.id} under 400k`,
+        `Can I schedule a viewing for this affordable ${result.title} in ? Love the 3/2 layout`,
+        `What are the HOA fees for this 3 bedroom property ${result.id}? I'm looking for homes under 350k`,
+        `Is this 3 bedroom home in still available? I'm not interested in South Carolina properties`,
+        `I'd like more information about this 3/2 in under 400k`,
+        `Are there any similar 3 bed 2 bath properties near ${result.title} in , not South Carolina?`,
+        `Can you tell me more about the schools near this 3 bedroom home? I'm avoiding South Carolina`,
+        `What's the square footage of this 3/2 property in ? I'm looking in the 200k-350k range`,
+        `Has the price for this 3 bedroom 2 bath home changed recently? My budget is 350k max`,
+        `I'd like to make an offer on this 3/2 property, not interested in South Carolina homes`,
+        `Does this 3 bedroom home have hurricane shutters?`,
+        `What are the property taxes on this 3/2 home in ? Looking for something affordable`,
+        `How old is the AC unit in this 3 bedroom? I want a home, not South Carolina`,
+        `Is this 3 bed 2 bath home in a flood zone? I'm specifically looking in `,
+        `Are there any pending special assessments on this 3/2 property? My max budget is 400k`
+       ];
+      } else {
+       // HIGH profile: Luxury 5+ bed, 4+ bath homes
+       engagementMessages = [
+        `I'm interested in scheduling a private tour of this luxury ${result.title}`,
+        `What amenities are included with this ${(result.bedrooms ?? 5)}+ bedroom estate? Looking for a premium property`,
+        `Is this luxury waterfront property still available? My budget is up to $8 million`,
+        `Does this estate come with staff quarters? I need at least 5 bedrooms for the main residence`,
+        `I'd like more details about the security features of this luxury ${result.title}`,
+        `Are there any other premium properties comparable to ${result.title} in this area?`,
+        `What are the property taxes on this luxury estate? Looking at properties $2-5 million`,
+        `Does this property have a wine cellar and home theater? I need at least 6 bedrooms`,
+        `Is the helipad on this estate FAA approved? I need a luxury property with easy access`,
+        `What's the square footage of the master suite in this luxury home? I require at least 5 bedrooms total`,
+        `I'd like to make an offer on this luxury property. Does it come fully furnished?`,
+        `Does this estate have separate guest accommodations? I'm looking for a primary residence with 5+ bedrooms`,
+        `What's the history of this architectural masterpiece? I collect luxury properties`,
+        `Are there any conservation easements on this estate? I'm looking for privacy and exclusivity`,
+        `How many cars does the garage accommodate? I need space for my collection in a luxury residence`
+       ];
+      }
+
+      const messageIndex = Math.floor(Math.random() * engagementMessages.length);
+
+      // Set up the engagement tool input, including query context for schema alignment
+      // Use the same template used for search (v2 or v3) - never use v4 for training data
+      const engagementToolInput = {
+       userId,
+       sessionId,
+       userMessage: engagementMessages[messageIndex],
+       position: result.position,
+       documentId: result.id,
+       lastSearchResults: sessionResults,
+       // Provide query context for logging schema
+       queryText: result.title, // Use property title as query.text for engagement
+       queryTemplateId: 'properties-search-v3', // Always use v3 for training data
+       queryResultCount: sessionResults.length
+      };
+
+      // Log engagement for observability with detailed information about property attributes
+      console.log(`Engagement: User ${userId}, Document ${result.id}, Position ${result.position}, Template: ${engagementToolInput.queryTemplateId}, Profile: ${inputData.propertyProfile}, State: ${result.state}, Bedrooms: ${result.bedrooms}, Bathrooms: ${result.bathrooms}, Price: ${result.home_price}`);
+
+      // For v4 template, add extra logging to help diagnose issues
+      if (engagementToolInput.queryTemplateId === 'properties-search-v4') {
+       if (inputData.propertyProfile === 'LOW') {
+        console.log(`V4 TEMPLATE ENGAGEMENT: Strongly reinforcing 3 bed, 2 bath home preference for document ${result.id}`);
+       } else {
+        console.log(`V4 TEMPLATE ENGAGEMENT: Strongly reinforcing 5+ bed, 4+ bath luxury home preference for document ${result.id}`);
+       }
+      }
+
+      await mockPropertyEngagementTool.execute({
+       context: engagementToolInput,
+       runtimeContext
+      });
+
+      stats.totalEngagements++;
+
+      // Add a small delay between engagements
+      if (inputData.maxSearchDelay > 0) {
+       await new Promise(resolve => setTimeout(resolve, Math.random() * inputData.maxSearchDelay / 2));
       }
      }
-
-     await mockPropertyEngagementTool.execute({
-      context: engagementToolInput,
-      runtimeContext
-     });
-
-     stats.totalEngagements++;
-
-     // Add a small delay between engagements
-     if (inputData.maxSearchDelay > 0) {
-      await new Promise(resolve => setTimeout(resolve, Math.random() * inputData.maxSearchDelay / 2));
-     }
     }
+    
+    stats.sessionsCompleted++;
    }
    
-   stats.sessionsCompleted++;
-  }
-  
-  stats.elapsedTimeMs = Date.now() - startTime;
-  return {
-   success: true,
-   message: `Successfully simulated ${stats.totalSearches} searches and ${stats.totalEngagements} engagements across ${stats.sessionsCompleted} user sessions with ${inputData.propertyProfile} property profile`,
-   stats,
-   details: {
-    startTime: new Date(startTime).toISOString(),
-    endTime: new Date().toISOString(),
-    configuration: {
-     propertyProfile: inputData.propertyProfile,
-     searchesPerSession: inputData.searchesPerSession,
-     engagementRate: inputData.engagementRate
+   stats.elapsedTimeMs = Date.now() - startTime;
+   return {
+    success: true,
+    message: `Successfully simulated ${stats.totalSearches} searches and ${stats.totalEngagements} engagements across ${stats.sessionsCompleted} user sessions with ${inputData.propertyProfile} property profile`,
+    stats,
+    details: {
+     startTime: new Date(startTime).toISOString(),
+     endTime: new Date().toISOString(),
+     configuration: {
+      propertyProfile: inputData.propertyProfile,
+      searchesPerSession: inputData.searchesPerSession,
+      engagementRate: inputData.engagementRate
+     }
     }
-   }
-  };
+   };
+  } catch (err) {
+   throw err;
+  }
  },
 });
 
@@ -633,30 +669,43 @@ const searchAutotuneWorkflow = createWorkflow({
    })
   }),
   execute: async ({ inputData }) => {
-   // Surface Python stdout/stderr if available
-   let pythonStdout = '';
-   let pythonStderr = '';
-   if (inputData.deployResult?.details) {
-    if (Array.isArray(inputData.deployResult.details.stdout)) {
-     pythonStdout = inputData.deployResult.details.stdout.filter(Boolean).join('\n');
+   try {
+    // Surface Python stdout/stderr if available
+    let pythonStdout = '';
+    let pythonStderr = '';
+    if (inputData.deployResult?.details) {
+     if (Array.isArray(inputData.deployResult.details.stdout)) {
+      pythonStdout = inputData.deployResult.details.stdout.filter(Boolean).join('\n');
+     }
+     if (Array.isArray(inputData.deployResult.details.stderr)) {
+      pythonStderr = inputData.deployResult.details.stderr.filter(Boolean).join('\n');
+     }
     }
-    if (Array.isArray(inputData.deployResult.details.stderr)) {
-     pythonStderr = inputData.deployResult.details.stderr.filter(Boolean).join('\n');
+    let message = 'Search autotune workflow completed successfully.';
+    if (pythonStdout || pythonStderr) {
+     message += '\n--- Python Output ---';
+     if (pythonStdout) message += `\nSTDOUT:\n${pythonStdout}`;
+     if (pythonStderr) message += `\nSTDERR:\n${pythonStderr}`;
     }
+    if (!inputData.searchSimResult?.success) {
+     throw new Error(inputData.searchSimResult?.message || 'Search simulation failed');
+    }
+    if (!inputData.trainResult?.success) {
+     throw new Error(inputData.trainResult?.message || 'Model training failed');
+    }
+    if (!inputData.deployResult?.success) {
+     throw new Error(inputData.deployResult?.message || 'Model deployment failed');
+    }
+    return {
+     success: Boolean(inputData.searchSimResult?.success) && Boolean(inputData.trainResult?.success) && Boolean(inputData.deployResult?.success),
+     message,
+     searchSimResult: inputData.searchSimResult,
+     trainResult: inputData.trainResult,
+     deployResult: inputData.deployResult
+    };
+   } catch (err) {
+    throw err;
    }
-   let message = 'Search autotune workflow completed successfully.';
-   if (pythonStdout || pythonStderr) {
-    message += '\n--- Python Output ---';
-    if (pythonStdout) message += `\nSTDOUT:\n${pythonStdout}`;
-    if (pythonStderr) message += `\nSTDERR:\n${pythonStderr}`;
-   }
-   return {
-    success: Boolean(inputData.searchSimResult?.success) && Boolean(inputData.trainResult?.success) && Boolean(inputData.deployResult?.success),
-    message,
-    searchSimResult: inputData.searchSimResult,
-    trainResult: inputData.trainResult,
-    deployResult: inputData.deployResult
-   };
   }
  }))
  .commit();
