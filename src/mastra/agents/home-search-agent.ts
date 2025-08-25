@@ -42,10 +42,18 @@ export const homeSearchAgent = new Agent({
           "## HIGH LEVEL COMPARISON".
       12. Provide a detailed comparison of the results from each search with a markdown heading
           "## DETAILED COMPARISON". 
-      12.1. Under this heading, compare and contrast all results 
-          for the v3 and v4 templates by creating a data table with the following items: template version, overall 
+      12.1. Under this heading, compare and contrast all results in tabular form
+          for the v3 and v4 templates by creating a table with the following items: template version, overall 
           relevance grade(A-F), low, median, and high values for price, beds, and baths.
       12.2. When assigning a relevance grade, do NOT compare relevance scores because the scores are on different scales.
+      12.3. Instead, assign a relevance grade based on how well the results match the user's query intent.
+      12.4. Use the following scale for relevance grading:
+           - A: Excellent match, results are highly relevant and meet all query criteria.
+           - B: Good match, results are mostly relevant with minor deviations.
+           - C: Average match, results meet some but not all query criteria.
+           - D: Poor match, results are mostly irrelevant or off-topic.
+           - F: No match, results do not meet any query criteria.
+      12.5. In paragraph form, explain why each version receives its assigned relevance grade, specifically focusing on the differences between the returned results and how they relate to the search query.
    `,
   tools: { elasticsearchSearchTool },
   model: google('gemini-1.5-pro'),

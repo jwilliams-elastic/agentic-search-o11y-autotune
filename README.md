@@ -59,12 +59,12 @@ cp .env.example .env
 
 ---
 
-### 🛠 Run Mastra and elastic-agent
+### 🛠 Run Mastra 
 
 | Command                                    | Description                              |
 |--------------------------------------------|------------------------------------------|
 | `npm run dev`                              | Run Mastra in dev mode (hot reload)      |
-| `cd elastic-agent && ./elastic-agent run`  | Start Elastic Agent                      |
+| `./start.sh`                               | Set python venv then start mastra.       |
 
 ---
 
@@ -82,10 +82,10 @@ Depending on the autotune settings, the following queries should return differen
 LOW - 3 beds, 2 baths, low maintanence, low price
 HIGH - 5 beds, 4 baths, high maintenance, high price
 
-"family home in Florida"
+"affordable home"
 "affordable home near schools"
-"single family property under 400k"
-"home with good value"
+"single family property under 500k"
+"property near disney world florida with 3 beds, 2 baths under 500K with pool and garage"
 
 ## 🧪 Development Notes
 
