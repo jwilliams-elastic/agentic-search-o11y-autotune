@@ -2,6 +2,7 @@ import { Client } from '@elastic/elasticsearch';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { config } from 'dotenv';
+import { expandEnvVars } from '../../utils/env';
 
 config();
 

@@ -1,3 +1,8 @@
+import dotenv from 'dotenv';
+import dotenvExpand from 'dotenv-expand';
+
+const myEnv = dotenv.config();
+dotenvExpand.expand(myEnv);
 
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';

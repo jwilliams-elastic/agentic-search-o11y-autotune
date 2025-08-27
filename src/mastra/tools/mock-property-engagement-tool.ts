@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { logger } from '../logger-agentless';
+import { expandEnvVars } from '../../utils/env';
 
 function logPropertyEngagement({
   userId,

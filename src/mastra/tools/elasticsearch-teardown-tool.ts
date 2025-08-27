@@ -5,6 +5,7 @@ import { config } from 'dotenv';
 import axios from 'axios';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { expandEnvVars } from '../../utils/env';
 
 config();
 
