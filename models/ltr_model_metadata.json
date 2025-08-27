@@ -2,7 +2,7 @@
   "model_id": "home_search_ltr_model",
   "type": "xgboost",
   "feature_count": 48,
-  "created_at": "2025-08-27T15:01:39.708482",
+  "created_at": "2025-08-27T17:52:28.654007",
   "features": [
     "position",
     "position_log",

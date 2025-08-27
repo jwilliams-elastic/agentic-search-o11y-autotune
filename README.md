@@ -79,7 +79,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=YOUR_GOOGLE_GENERATIVE_AI_API_KEY
 2. Run 'elastic-setup-workflow' (.env file has default values but you can override in mastra UI)
 3. Run 'search-autotune-workflow' (LOW and HIGH option generates different simulated search engagement behavior - HIGH = Luxury, LOW = Affordable)
 4. Open http://localhost:4111/agents and run the "Home Search Agent"
-5. Show the difference b/t LTR and no-LTR LLM jugdment with a query like "affordable home", "luxury home" and "5+ bed, 4+ bath home near orlando fl with garage and pool under 5M"
+5. Show the difference b/t LTR and no-LTR LLM jugdment with a query like "affordable home", "luxury home" and "6 bed, 6 bath single family home near orlando fl with garage and pool under 5M with designer finishes throughout"
 6. You can trigger engagement by asking for more detail for a specific result(ex: tell me more about result #20 in v4 results)
 7. Open the "Agentic Search Analytics" dashboard - KPIs like CTR, Average Click Position and search template usage.
 
