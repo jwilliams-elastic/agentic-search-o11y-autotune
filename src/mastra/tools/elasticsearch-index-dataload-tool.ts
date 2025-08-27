@@ -15,7 +15,7 @@ const inputSchema = z.object({
   dataFile: z.string().optional().describe('Path to the JSONL data file. Defaults to DATA_FILE from .env'),
   batchSize: z.number().default(1000).describe('Number of records per batch'),
   maxRetries: z.number().default(5).describe('Maximum number of retries for bulk insert'),
-  initialDelay: z.number().default(1).describe('Initial delay in seconds for retries'),
+  initialDelay: z.number().default(10).describe('Initial delay in seconds for retries'),
   backoffFactor: z.number().default(2).describe('Factor to multiply delay by for each retry'),
 });
 
@@ -34,7 +34,7 @@ const loadData = async (params: z.infer<typeof inputSchema>, runtimeContext?: an
   const dataFile = params.dataFile || process.env.DATA_FILE;
   const batchSize = params.batchSize || 1000;
   const maxRetries = params.maxRetries || 5;
-  const initialDelay = params.initialDelay || 1;
+  const initialDelay = params.initialDelay || 10;
   const backoffFactor = params.backoffFactor || 2;
   
   // Validate required parameters
@@ -71,7 +71,7 @@ const loadData = async (params: z.infer<typeof inputSchema>, runtimeContext?: an
 
   const bulkWithRetries = async (actions: any[], batchNumber: number, totalBatches: number) => {
     let attempt = 0;
-    let delay = initialDelay * 1000; // convert to ms
+    let delay = initialDelay;
     while (attempt < maxRetries) {
       try {
         // Add trace event for retry attempt

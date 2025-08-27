@@ -128,7 +128,7 @@ const dashboardSetupStep = createStep({
       elasticUrl: process.env.ELASTIC_URL,
       kibanaUrl: process.env.KIBANA_URL,
       elasticApiKey: process.env.ELASTIC_API_KEY,
-      dashboardFilePath: process.env.DASHBOARD_FILE_PATH || `${process.env.PROJECT_HOME || ''}/sample_kibana_dashboard.ndjson`,
+      dashboardFilePath: process.env.DASHBOARD_FILE_PATH || `${process.env.PROJECT_HOME || ''}/dashboards/sample_kibana_dashboard.ndjson`,
     };
     const toolResult = await elasticsearchDashboardSetupTool.execute({ context: toolInput, runtimeContext });
     return toolResult;
