@@ -22,8 +22,8 @@ This repo uses:
 ### ✅ Prerequisites
 
 - **Node.js** `>= 20.9.0`
+- **Python** `>=3.10, <3.13`
 - **Git**
-- Optional: [Bun](https://bun.sh) or [Volta](https://volta.sh) for managing Node versions
 
 ---
 
@@ -32,6 +32,9 @@ This repo uses:
 ```bash
 git clone https://github.com/jwilliams-elastic/agentic-search-o11y-autotune.git
 cd agentic-search-o11y-autotune
+python -m venv .venv
+source .venv/bin/activate
+pip install -r python/requirements.txt
 npm install
 ```
 
@@ -44,18 +47,19 @@ npm install
       - you will need to obtain URL for `.env` `ELASTIC_URL` entry
       - you will need to create an API key for `.env` `ELASTIC_API_KEY` entry 
 
-1. Create a `.env` file:
+2. Create a `.env` file:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Populate `.env` with values for all variables that start with "YOUR"
+3. Populate `.env` with values for the following variables
 
-3. Import `sample_kibana_dashboard.ndjson` into your elasticsearch environment
-   - Open Kibana and navigate to Stack Management -> Saved Objects
-   - Click "Import" 
-   - Select file and click "Import"
+```
+PROJECT_HOME=YOUR_PROJECT_HOME_ABSOLUTE_PATH
+ELASTIC_URL=YOUR_ELASTIC_URL
+ELASTIC_API_KEY=YOUR_ELASTIC_API_KEY
+```
 
 ---
 
@@ -72,10 +76,11 @@ cp .env.example .env
 
 1. Open http://localhost:4111/workflows
 2. Run 'elastic-setup-workflow' (.env file has default values but you can override in mastra UI)
-3. Run 'search-autotune-workflow' (there is a LOW and HIGH option that toggles LTR behavior)
-3. Open http://localhost:4111/agents
-4. Show the difference b/t LTR and no-LTR results with a query like "family home in Florida"
-5. Open the "Agentic Search Analytics" dashboard - KPIs like CTR, Average Click Position and search template usage.
+3. Run 'search-autotune-workflow' (LOW and HIGH option generates different simulated search engagement behavior - HIGH = Luxury, LOW = Affordable)
+4. Open http://localhost:4111/agents and run the "Home Search Agent"
+5. Show the difference b/t LTR and no-LTR LLM jugdment with a query like "affordable home", "luxury home near orlando fl" and "luxury 5+ bed, 4+ bath home near orlando fl with garage and pool under 3M"
+6. You can trigger engagement by asking for more detail for a specific result(ex: tell me more about result #20 in v4 results)
+7. Open the "Agentic Search Analytics" dashboard - KPIs like CTR, Average Click Position and search template usage.
 
 ### Autotune Search Queries
 Depending on the autotune settings, the following queries should return different results.
@@ -84,8 +89,8 @@ HIGH - 5 beds, 4 baths, high maintenance, high price
 
 "affordable home"
 "affordable home near schools"
-"single family property under 500k"
-"property near disney world florida with 3 beds, 2 baths under 500K with pool and garage"
+"luxury property under 3M"
+"property near disney world florida with 5+ beds, 4+ baths under 2M with pool and garage"
 
 ## 🧪 Development Notes
 
@@ -254,3 +259,4 @@ Here is a concise business logic summary for the top 15 features in the LTR mode
 15. **search_time_ms**: The time taken to perform the search; can be a proxy for query complexity or backend performance.
 
 These features combine user behavior, search ranking, query complexity, and property relevance to optimize which properties are shown at the top of search results.
+

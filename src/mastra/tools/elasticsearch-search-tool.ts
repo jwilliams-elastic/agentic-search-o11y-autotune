@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { fileLogger, logger } from '../logger-agentless';
 import { config } from 'dotenv';
+import { expandEnvVars } from '../../utils/env';
 
 config();
 

@@ -2,6 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { spawn } from "child_process";
 import { config } from 'dotenv';
+import { expandEnvVars } from '../../utils/env';
 
 config();
 
@@ -21,6 +22,12 @@ const scriptPaths: Record<string, string> = {
   'train-and-deploy-model': process.env.LTR_PY_SCRIPT ?? ''
 };
 
+// Helper to resolve ${PROJECT_HOME} in paths
+function resolveProjectHomePath(path: string): string {
+  const projectHome = process.env.PROJECT_HOME || process.cwd();
+  return path.replace(/\$\{PROJECT_HOME\}/g, projectHome);
+}
+
 let currentExecution: Promise<z.infer<typeof outputSchema>> | null = null;
 
 const executePython = async (params: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> => {
@@ -32,21 +39,27 @@ const executePython = async (params: z.infer<typeof inputSchema>): Promise<z.inf
     try {
       const { scriptCommand } = params;
 
-      const scriptPath = scriptPaths[scriptCommand];
-      const resolvedScriptPath = scriptPath;
+      let scriptPath = scriptPaths[scriptCommand];
+      const resolvedScriptPath = resolveProjectHomePath(scriptPath);
 
       if (!resolvedScriptPath) {
         throw new Error('Script path is not specified missing .env variable');
       }
 
+      // Resolve LTR_MODEL_DIR as well
+      const resolvedEnv = { ...process.env };
+      if (resolvedEnv.LTR_MODEL_DIR) {
+        resolvedEnv.LTR_MODEL_DIR = resolveProjectHomePath(resolvedEnv.LTR_MODEL_DIR);
+      }
+
       console.log(`params: ${JSON.stringify(params)}`);
       console.log(`[PythonTool] Executing script: ${resolvedScriptPath} with command: ${scriptCommand}`);
-      console.log(`[PythonTool] Environment variables: LTR_MODEL_DIR=${process.env.LTR_MODEL_DIR}`);
+      console.log(`[PythonTool] Environment variables: LTR_MODEL_DIR=${resolvedEnv.LTR_MODEL_DIR}`);
 
       // Instead of passing scriptCommand as an argument, we run it as a Typer command
       const args = ["-u", resolvedScriptPath, scriptCommand]; // -u = unbuffered stdout
       const child = spawn("python", args, {
-        env: process.env,
+        env: resolvedEnv,
         stdio: ["ignore", "pipe", "pipe"],
       });
 

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { config } from 'dotenv';
 import { readFile, readdir } from 'fs/promises';
 import { resolve } from 'path';
+import { expandEnvVars } from '../../utils/env';
 
 config();
 
@@ -136,7 +137,8 @@ const createSearchTemplates = async (params: z.infer<typeof inputSchema>): Promi
   
   try {
     // Get all template files from the directory
-    const templatesDir = params.templatesDir || process.env.SEARCH_TEMPLATES_DIR || './search_templates';
+    let templatesDir = params.templatesDir || process.env.SEARCH_TEMPLATES_DIR || './search_templates';
+    templatesDir = expandEnvVars(templatesDir);
     if (!templatesDir) {
       return {
         success: false,

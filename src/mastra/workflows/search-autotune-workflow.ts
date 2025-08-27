@@ -1,3 +1,4 @@
+import { expandEnvVars } from '../../utils/env';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { elasticsearchSearchTool } from '../tools/elasticsearch-search-tool';
 import { mockPropertyEngagementTool } from '../tools/mock-property-engagement-tool';

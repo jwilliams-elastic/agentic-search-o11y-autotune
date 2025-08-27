@@ -3,6 +3,7 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
 import { elasticsearchSearchTool } from '../tools/elasticsearch-search-tool';
+import { mockPropertyEngagementTool } from '../tools/mock-property-engagement-tool';
  
 export const memory = new Memory({
   storage: new LibSQLStore({
@@ -33,29 +34,30 @@ export const homeSearchAgent = new Agent({
          can infer them from the query text.
       6. Populate 'features' if you can infer them from the query text (ex: "pool, garage").
       7. Populate 'query' parameter with the query text.
-      8. Execute 2 searches, one with the v3 template and one with the v4 template.
+      8. Execute 3 searches: one with the v2 template, one with the v3 template, and one with the v4 template.
       9. Always sort results by score from highest to lowest.
       10. Do not invent or modify template names. Use only the provided names exactly as shown.
+      11. If the user asks for more detail about search results, use the mockPropertyEngagementTool to simulate user engagement and gather more data.
 
       INSTRUCTIONS FOR RESULT COMPARISON
-      11. Provide a high level comparison of the results from each search with a markdown heading 
+      12. Provide a high level comparison of the results from each search with a markdown heading 
           "## HIGH LEVEL COMPARISON".
-      12. Provide a detailed comparison of the results from each search with a markdown heading
+      13. Provide a detailed comparison of the results from each search with a markdown heading
           "## DETAILED COMPARISON". 
-      12.1. Under this heading, compare and contrast all results in tabular form
-          for the v3 and v4 templates by creating a table with the following items: template version, overall 
+      13.1. Under this heading, compare and contrast all results in tabular form
+          for the v2, v3 and v4 templates by creating a table with the following items: template version, overall 
           relevance grade(A-F), low, median, and high values for price, beds, and baths.
-      12.2. When assigning a relevance grade, do NOT compare relevance scores because the scores are on different scales.
-      12.3. Instead, assign a relevance grade based on how well the results match the user's query intent.
-      12.4. Use the following scale for relevance grading:
+      13.2. When assigning a relevance grade, do NOT compare relevance scores because the scores are on different scales.
+      13.3. Instead, assign a relevance grade based on how well the results match the user's query intent.
+      13.4. Use the following scale for relevance grading:
            - A: Excellent match, results are highly relevant and meet all query criteria.
            - B: Good match, results are mostly relevant with minor deviations.
            - C: Average match, results meet some but not all query criteria.
            - D: Poor match, results are mostly irrelevant or off-topic.
            - F: No match, results do not meet any query criteria.
-      12.5. In paragraph form, explain why each version receives its assigned relevance grade, specifically focusing on the differences between the returned results and how they relate to the search query.
+      13.5. In paragraph form, explain why each version receives its assigned relevance grade, specifically focusing on the differences between the returned results and how they relate to the search query.
    `,
-  tools: { elasticsearchSearchTool },
+  tools: { elasticsearchSearchTool, mockPropertyEngagementTool },
   model: google('gemini-1.5-pro'),
   memory,
 });

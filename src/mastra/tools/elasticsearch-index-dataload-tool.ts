@@ -4,6 +4,7 @@ import { z } from 'zod';
 import * as fs from 'fs';
 import * as readline from 'readline';
 import { config } from 'dotenv';
+import { expandEnvVars } from '../../utils/env';
 
 config();
 
