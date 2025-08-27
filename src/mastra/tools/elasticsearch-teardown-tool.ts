@@ -44,7 +44,9 @@ const teardownElasticsearch = async ({
 
   // Delete all search templates from the search_templates directory
   try {
-    const dir = templatesDir || process.env.SEARCH_TEMPLATES_DIR || './search_templates';
+    // Use expandEnvVars to resolve any env vars in the directory path
+    const rawDir = templatesDir || process.env.SEARCH_TEMPLATES_DIR || './search_templates';
+    const dir = expandEnvVars(rawDir);
     const files = await fs.readdir(dir);
     const templateFiles = files.filter(file => file.endsWith('.mustache'));
     
@@ -195,11 +197,11 @@ export const elasticsearchTeardownTool = createTool({
   inputSchema,
   outputSchema,
   execute: async ({ context }) => {
-    const elasticUrl = context.elasticUrl ?? process.env.ELASTIC_URL;
-    const elasticApiKey = context.elasticApiKey ?? process.env.ELASTIC_API_KEY;
-    const indexName = context.indexName ?? process.env.INDEX_NAME;
-    const inferenceId = context.inferenceId ?? process.env.INFERENCE_ID;
-    const templateId = context.templateId ?? process.env.TEMPLATE_ID;
+  const elasticUrl = context.elasticUrl ?? process.env.ELASTIC_URL;
+  const elasticApiKey = context.elasticApiKey ?? process.env.ELASTIC_API_KEY;
+  const indexName = context.indexName ?? process.env.INDEX_NAME;
+  const inferenceId = context.inferenceId ?? process.env.INFERENCE_ID;
+  const templatesDir = context.templatesDir ?? process.env.SEARCH_TEMPLATES_DIR;
 
     if (!elasticUrl || !elasticApiKey) {
       throw new Error(
@@ -212,7 +214,7 @@ export const elasticsearchTeardownTool = createTool({
       elasticApiKey,
       indexName,
       inferenceId,
-      templateId
+      templatesDir
     });
   },
 });

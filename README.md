@@ -34,7 +34,7 @@ git clone https://github.com/jwilliams-elastic/agentic-search-o11y-autotune.git
 cd agentic-search-o11y-autotune
 python -m venv .venv
 source .venv/bin/activate
-pip install -r python/requirements.txt
+pip install -r ./src/python/requirements.txt
 npm install
 ```
 
@@ -59,6 +59,7 @@ cp .env.example .env
 PROJECT_HOME=YOUR_PROJECT_HOME_ABSOLUTE_PATH
 ELASTIC_URL=YOUR_ELASTIC_URL
 ELASTIC_API_KEY=YOUR_ELASTIC_API_KEY
+GOOGLE_GENERATIVE_AI_API_KEY=YOUR_GOOGLE_GENERATIVE_AI_API_KEY
 ```
 
 ---
@@ -78,23 +79,13 @@ ELASTIC_API_KEY=YOUR_ELASTIC_API_KEY
 2. Run 'elastic-setup-workflow' (.env file has default values but you can override in mastra UI)
 3. Run 'search-autotune-workflow' (LOW and HIGH option generates different simulated search engagement behavior - HIGH = Luxury, LOW = Affordable)
 4. Open http://localhost:4111/agents and run the "Home Search Agent"
-5. Show the difference b/t LTR and no-LTR LLM jugdment with a query like "affordable home", "luxury home near orlando fl" and "luxury 5+ bed, 4+ bath home near orlando fl with garage and pool under 3M"
+5. Show the difference b/t LTR and no-LTR LLM jugdment with a query like "affordable home", "luxury home" and "5+ bed, 4+ bath home near orlando fl with garage and pool under 5M"
 6. You can trigger engagement by asking for more detail for a specific result(ex: tell me more about result #20 in v4 results)
 7. Open the "Agentic Search Analytics" dashboard - KPIs like CTR, Average Click Position and search template usage.
 
-### Autotune Search Queries
-Depending on the autotune settings, the following queries should return different results.
-LOW - 3 beds, 2 baths, low maintanence, low price
-HIGH - 5 beds, 4 baths, high maintenance, high price
-
-"affordable home"
-"affordable home near schools"
-"luxury property under 3M"
-"property near disney world florida with 5+ beds, 4+ baths under 2M with pool and garage"
-
 ## 🧪 Development Notes
 
-- Most code is vibe coded in [TypeScript](https://www.typescriptlang.org/)
+- Heavy use of vibe coded [TypeScript](https://www.typescriptlang.org/)
 - Mastra workflows and tools live in `/src`
 - Logs use [pino-pretty](https://github.com/pinojs/pino-pretty) during development
 - Logs are shipped to an elasticsearch datastream running in the same serverless project
@@ -124,6 +115,8 @@ agentic-search-o11y-autotune/
 │   ├── home_search_ltr_model.json
 │   ├── ltr_model_metadata.json
 │   └── xgboost_ltr_model.json
+|── dashboards/
+│   └── sample_kibana_dashboard.ndjson # prebuilt search o11y dashboard
 ├── data/                     # Data files and JSONL property data
 │   └── properties.jsonl
 ├── search_templates/         # Mustache templates for ES search
