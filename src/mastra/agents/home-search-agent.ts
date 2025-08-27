@@ -50,9 +50,9 @@ export const homeSearchAgent = new Agent({
       13.2. When assigning a relevance grade, do NOT compare relevance scores because the scores are on different scales.
       13.3. Instead, assign a relevance grade based on how well the results match the user's query intent.
       13.4. Use the following scale for relevance grading:
-           - A: Excellent match, results are highly relevant and meet all query criteria.
-           - B: Good match, results are mostly relevant with minor deviations.
-           - C: Average match, results meet some but not all query criteria.
+           - A: Excellent match, results are highly relevant and meet or exceed all query criteria.(ex: more beds/baths than search query)
+           - B: Good match, results are mostly relevant with minor deviations.(ex: missing features)
+           - C: Average match, results meet some but not all query criteria.(ex: townhome or condo instead of single-family home)
            - D: Poor match, results are mostly irrelevant or off-topic.
            - F: No match, results do not meet any query criteria.
       13.5. In paragraph form, explain why each version receives its assigned relevance grade, specifically focusing on the differences between the returned results and how they relate to the search query.
