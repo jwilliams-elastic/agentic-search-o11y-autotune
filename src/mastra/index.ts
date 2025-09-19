@@ -10,6 +10,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { elasticsearchSetupWorkflow } from './workflows/elasticsearch-setup-workflow';
 import { searchAutotuneWorkflow } from './workflows/search-autotune-workflow';
 import { homeSearchAgent } from './agents/home-search-agent';
+import { homeSearchAgentSimple } from './agents/home-search-agent-simple';
 // import { fileLogger } from './logger';
 import { logger} from './logger-agentless';
 
@@ -20,7 +21,7 @@ logger.info("Mastra runtime started");
 
 export const mastra = new Mastra({
   workflows: { elasticsearchSetupWorkflow, searchAutotuneWorkflow },
-  agents: { homeSearchAgent },
+  agents: { homeSearchAgent, homeSearchAgentSimple },
   storage: new LibSQLStore({
     // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
