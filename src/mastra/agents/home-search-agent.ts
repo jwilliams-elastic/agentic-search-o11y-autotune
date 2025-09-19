@@ -19,7 +19,7 @@ export const memory = new Memory({
 });
 
 export const homeSearchAgent = new Agent({
-  name: 'Home Search Agent',
+  name: 'Home Search Agent LTR Comparison',
   instructions: `
       You are an assistant that recommends homes based only on search results retrieved from Elasticsearch using elasticSearchTool. 
 
