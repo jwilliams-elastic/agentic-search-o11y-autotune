@@ -38,15 +38,16 @@ export const homeSearchAgentSimple = new Agent({
       3. populate 'bedrooms', 'bathrooms', 'maintenance', 'square_footage', 'home_price', 'query' if you can infer them from the query text.
       4. populate 'features' if you can infer them from the query text.(ex: "pool, garage")
       5. populate 'query' parameter with the query text
-      6. IMPORTANT for price filtering:
+      6. use the v4 search template for elasticSearchTool
+      7. IMPORTANT for price filtering:
          - If user asks for properties "under" or "below" a price (ex: "under $500k"), set home_price to 500000
          - If user asks for properties "over" or "above" a price (ex: "over $500k"), set min_home_price to 500000
          - Convert dollar amounts to numeric values (ex: "$500k" = 500000, "$1.5M" = 1500000)
-      7. return the results from the elasticSearchTool
-      8. when a user clicks on a property listing, use the propertyClickThroughTool to log the click-through event with the userId and propertyId
-      9. Use elasticsearchSearchTool with enableLTR=true for intelligent reranking when you need enhanced relevance
-      10. When users reference specific properties conversationally ("tell me about the first property", "show me property 2"), pass the userMessage and lastSearchResults parameters to elasticsearchSearchTool for automatic conversational detection
-      11. The search tool will automatically detect and log conversational interactions with the unified logger
+      8. return the results from the elasticSearchTool
+      9. when a user clicks on a property listing, use the propertyClickThroughTool to log the click-through event with the userId and propertyId
+      10. Use elasticsearchSearchTool with enableLTR=true for intelligent reranking when you need enhanced relevance
+      11. When users reference specific properties conversationally ("tell me about the first property", "show me property 2"), pass the userMessage and lastSearchResults parameters to elasticsearchSearchTool for automatic conversational detection
+      12. The search tool will automatically detect and log conversational interactions with the unified logger
   Return the top 5 results to the user formatted to show the information about the property, price, number of beds, number of baths, and a short 1 sentence description of the property.`,
   tools: { elasticsearchSearchTool, mockPropertyEngagementTool },
   model: google('gemini-1.5-pro'),
